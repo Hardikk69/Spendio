@@ -1,8 +1,9 @@
+billing.py
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime, date, timedelta
 from app.extensions import db
-from app.models import Transaction, Subscription
+from app.models import Payment, Billing, Subscription, Service
 
 billing_bp = Blueprint("billing", __name__)
 
@@ -11,14 +12,14 @@ def _filter_by_period(query, period):
     now = datetime.utcnow()
     if period == "month":
         start = now.replace(day=1, hour=0, minute=0, second=0)
-        query = query.filter(Transaction.payment_date >= start)
+        query = query.filter(Payment.timestamp >= start)
     elif period == "quarter":
         quarter_start_month = ((now.month - 1) // 3) * 3 + 1
         start = now.replace(month=quarter_start_month, day=1, hour=0, minute=0, second=0)
-        query = query.filter(Transaction.payment_date >= start)
+        query = query.filter(Payment.timestamp >= start)
     elif period == "year":
         start = now.replace(month=1, day=1, hour=0, minute=0, second=0)
-        query = query.filter(Transaction.payment_date >= start)
+        query = query.filter(Payment.timestamp >= start)
     return query
 
 
@@ -28,35 +29,58 @@ def list_transactions():
     user_id = get_jwt_identity()
     period = request.args.get("period", "all").strip().lower()
 
-    query = Transaction.query.filter_by(user_id=user_id)
+    # We join Subscription and Service to get the name
+    query = db.session.query(Payment, Service.name).join(
+        Billing, Payment.billing_id == Billing.billing_id
+    ).join(
+        Subscription, Billing.subscription_id == Subscription.subscription_id
+    ).join(
+        Service, Subscription.service_id == Service.service_id
+    ).filter(Billing.user_id == user_id)
+    
     query = _filter_by_period(query, period)
-    transactions = query.order_by(Transaction.payment_date.desc()).all()
+    results = query.order_by(Payment.timestamp.desc()).all()
 
-    return jsonify({"transactions": [t.to_dict() for t in transactions]}), 200
+    result = []
+    for p, sname in results:
+        d = p.to_dict()
+        d['id'] = p.payment_id
+        d['transaction_id'] = f"TXN-{p.payment_id:06d}"
+        d['amount'] = float(p.amount_paid)
+        d['date'] = p.timestamp.strftime("%b %d, %Y") if p.timestamp else None
+        d['subscription_name'] = sname
+        d['payment_method'] = "Credit Card" # Placeholder if not in DB
+        result.append(d)
+
+    return jsonify({"transactions": result}), 200
 
 
 @billing_bp.route("/transactions/<txn_id>", methods=["GET"])
 @jwt_required()
 def get_transaction(txn_id):
     user_id = get_jwt_identity()
-    txn = Transaction.query.filter_by(id=txn_id, user_id=user_id).first_or_404()
-    return jsonify({"transaction": txn.to_dict()}), 200
+    payment = db.session.query(Payment).join(
+        Billing, Payment.billing_id == Billing.billing_id
+    ).filter(Payment.payment_id == txn_id, Billing.user_id == user_id).first_or_404()
+    
+    return jsonify({"transaction": payment.to_dict()}), 200
 
 
 @billing_bp.route("/transactions/<txn_id>/retry", methods=["POST"])
 @jwt_required()
 def retry_payment(txn_id):
     user_id = get_jwt_identity()
-    txn = Transaction.query.filter_by(id=txn_id, user_id=user_id).first_or_404()
+    payment = db.session.query(Payment).join(
+        Billing, Payment.billing_id == Billing.billing_id
+    ).filter(Payment.payment_id == txn_id, Billing.user_id == user_id).first_or_404()
 
-    if txn.status != "Failed":
+    if payment.status != "Failed":
         return jsonify({"error": "Only failed payments can be retried"}), 400
 
-    # Simulate retry — in production this would call a payment gateway
-    txn.status = "Success"
-    txn.invoice_available = True
+    # Simulate retry
+    payment.status = "Success"
     db.session.commit()
-    return jsonify({"message": "Payment retry successful", "transaction": txn.to_dict()}), 200
+    return jsonify({"message": "Payment retry successful", "transaction": payment.to_dict()}), 200
 
 
 @billing_bp.route("/upcoming", methods=["GET"])
@@ -66,25 +90,28 @@ def upcoming_bills():
     today = date.today()
     in_30_days = today + timedelta(days=30)
 
-    subs = Subscription.query.filter(
+    # Join Subscription with Service to get names/amounts
+    results = db.session.query(Subscription, Service).join(
+        Service, Subscription.service_id == Service.service_id
+    ).filter(
         Subscription.user_id == user_id,
         Subscription.status == "Active",
-        Subscription.next_billing != None,
-        Subscription.next_billing >= today,
-        Subscription.next_billing <= in_30_days,
-    ).order_by(Subscription.next_billing.asc()).all()
+        Subscription.next_billing_date != None,
+        Subscription.next_billing_date >= today,
+        Subscription.next_billing_date <= in_30_days,
+    ).order_by(Subscription.next_billing_date.asc()).all()
 
     bills = [
         {
-            "subscription_id": s.id,
-            "subscription": s.name,
-            "amount": float(s.amount),
-            "due_date": s.next_billing.strftime("%b %d, %Y"),
-            "due_date_iso": s.next_billing.isoformat(),
-            "autopay": s.autopay,
+            "subscription_id": s.subscription_id,
+            "subscription": svc.name,
+            "amount": float(svc.base_price),
+            "due_date": s.next_billing_date.strftime("%b %d, %Y"),
+            "due_date_iso": s.next_billing_date.isoformat(),
+            "autopay": s.auto_pay,
             "status": "upcoming",
         }
-        for s in subs
+        for s, svc in results
     ]
 
     return jsonify({"upcoming_bills": bills, "count": len(bills)}), 200
@@ -97,28 +124,31 @@ def billing_stats():
     current_year = datetime.utcnow().year
     year_start = datetime(current_year, 1, 1)
 
-    all_txns = Transaction.query.filter(
-        Transaction.user_id == user_id,
-        Transaction.payment_date >= year_start,
+    # All payments for the current year
+    all_payments = db.session.query(Payment).join(
+        Billing, Payment.billing_id == Billing.billing_id
+    ).filter(
+        Billing.user_id == user_id,
+        Payment.timestamp >= year_start,
     ).all()
 
-    total_spent = sum(float(t.amount) for t in all_txns if t.status == "Success")
-    successful = sum(1 for t in all_txns if t.status == "Success")
-    failed = sum(1 for t in all_txns if t.status == "Failed")
+    total_spent = sum(float(p.amount_paid) for p in all_payments if p.status == "Success")
+    successful = sum(1 for p in all_payments if p.status == "Success")
+    failed = sum(1 for p in all_payments if p.status == "Failed")
 
     today = date.today()
     in_30_days = today + timedelta(days=30)
     pending_bills = Subscription.query.filter(
         Subscription.user_id == user_id,
         Subscription.status == "Active",
-        Subscription.next_billing != None,
-        Subscription.next_billing >= today,
-        Subscription.next_billing <= in_30_days,
+        Subscription.next_billing_date != None,
+        Subscription.next_billing_date >= today,
+        Subscription.next_billing_date <= in_30_days,
     ).count()
 
     return jsonify({
-        "total_spent_this_year": round(total_spent, 2),
+        "total_spent_year": round(total_spent, 2),
         "successful_payments": successful,
         "failed_payments": failed,
-        "pending_upcoming": pending_bills,
+        "pending_payments": pending_bills,
     }), 200
