@@ -1,8 +1,8 @@
-settings.py
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.extensions import db
 from app.models import User
+from app.services.notification_service import create_notification
 
 settings_bp = Blueprint("settings", __name__)
 
@@ -98,5 +98,18 @@ def get_payment():
 @settings_bp.route("/payment", methods=["PUT"])
 @jwt_required()
 def update_payment():
+    user_id = get_jwt_identity()
+    data = request.get_json() or {}
+    
+    # Trigger notification if enable_autopay is toggled
+    if "enable_autopay" in data:
+        status = "enabled" if data["enable_autopay"] else "disabled"
+        create_notification(
+            user_id=user_id,
+            n_type="alert",
+            title="Auto-pay Settings Changed",
+            message=f"Auto-pay has been {status} for your account."
+        )
+
     # Placeholder until a user_settings table is added
     return jsonify({"message": "Payment settings updated"}), 200
