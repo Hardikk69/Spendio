@@ -15,9 +15,8 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "../components/ui/dialog";
-import { MoreVertical, Check } from "lucide-react";
+import { MoreVertical, Check, Loader2, AlertCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +25,8 @@ import {
 } from "../components/ui/dropdown-menu";
 import { Label } from "../components/ui/label";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
+import { api } from "../../lib/api";
+import { useNavigate } from "react-router";
 
 const servicesData = {
   Entertainment: [
@@ -96,13 +97,6 @@ const servicesData = {
       pricing: { monthly: 899, yearly: 8990 },
       color: "from-purple-500 to-purple-700"
     },
-    {
-      name: "Microsoft Azure",
-      logo: "⚡",
-      description: "Cloud computing services for building apps",
-      pricing: { monthly: 3000, yearly: 32000 },
-      color: "from-blue-500 to-blue-700"
-    },
   ],
   "AI / GPT": [
     {
@@ -120,60 +114,25 @@ const servicesData = {
       color: "from-indigo-500 to-purple-600"
     },
   ],
-  Productivity: [
-    {
-      name: "Microsoft 365",
-      logo: "📊",
-      description: "Office apps, cloud storage, and advanced security",
-      pricing: { monthly: 489, yearly: 4899 },
-      color: "from-blue-600 to-blue-700"
-    },
-    {
-      name: "Adobe Creative Cloud",
-      logo: "🎨",
-      description: "Complete collection of creative apps and services",
-      pricing: { monthly: 4249, yearly: 42490 },
-      color: "from-red-600 to-pink-600"
-    },
-    {
-      name: "Notion",
-      logo: "📝",
-      description: "All-in-one workspace for notes, docs, and projects",
-      pricing: { monthly: 399, yearly: 3990 },
-      color: "from-slate-700 to-slate-900"
-    },
-  ],
-  Utilities: [
-    {
-      name: "1Password",
-      logo: "🔐",
-      description: "Password manager for families and businesses",
-      pricing: { monthly: 249, yearly: 2490 },
-      color: "from-blue-600 to-indigo-700"
-    },
-    {
-      name: "Dropbox",
-      logo: "📦",
-      description: "Cloud storage and file synchronization service",
-      pricing: { monthly: 799, yearly: 7990 },
-      color: "from-blue-500 to-blue-600"
-    },
-  ],
 };
 
 export default function ProductsServices() {
+  const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState<string>("Entertainment");
   const [selectedService, setSelectedService] = useState<any>(null);
   const [duration, setDuration] = useState<"monthly" | "yearly">("monthly");
   const [paymentType, setPaymentType] = useState<"solo" | "shared">("solo");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSubscribing, setIsSubscribing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const categories = Object.keys(servicesData);
   const services = servicesData[selectedCategory as keyof typeof servicesData] || [];
 
-  const handleSubscribe = (service: any) => {
+  const handleOpenDialog = (service: any) => {
     setSelectedService(service);
     setIsDialogOpen(true);
+    setError(null);
   };
 
   const calculateTotal = () => {
@@ -181,6 +140,45 @@ export default function ProductsServices() {
     const basePrice = selectedService.pricing[duration];
     const tax = basePrice * 0.18; // 18% GST
     return basePrice + tax;
+  };
+
+  const processSubscription = async () => {
+    if (!selectedService) return;
+    try {
+      setIsSubscribing(true);
+      setError(null);
+
+      // Map frontend category names to backend category values
+      const categoryMap: Record<string, string> = {
+        "Entertainment": "OTT",
+        "Music": "Music",
+        "Developer Tools": "SaaS",
+        "AI / GPT": "SaaS",
+      };
+
+      const billingCycle = duration === "monthly" ? "Monthly" : "Yearly";
+      const nextBillingDate = new Date(
+        Date.now() + (duration === "monthly" ? 30 : 365) * 24 * 60 * 60 * 1000
+      ).toISOString().split("T")[0];
+
+      const payload = {
+        name: selectedService.name,
+        category: categoryMap[selectedCategory] || "Other",
+        amount: selectedService.pricing[duration],
+        billing_cycle: billingCycle,
+        status: "Active",
+        next_billing: nextBillingDate,
+        autopay: false,
+      };
+
+      await api.post("/api/subscriptions/", payload);
+      setIsDialogOpen(false);
+      navigate("/subscriptions");
+    } catch (err: any) {
+      setError(err.message || "Failed to create subscription");
+    } finally {
+      setIsSubscribing(false);
+    }
   };
 
   return (
@@ -233,7 +231,7 @@ export default function ProductsServices() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleSubscribe(service)}>
+                    <DropdownMenuItem onClick={() => handleOpenDialog(service)}>
                       Subscribe Now
                     </DropdownMenuItem>
                     <DropdownMenuItem>View Details</DropdownMenuItem>
@@ -256,7 +254,7 @@ export default function ProductsServices() {
               </div>
               <Button 
                 className="w-full mt-2" 
-                onClick={() => handleSubscribe(service)}
+                onClick={() => handleOpenDialog(service)}
               >
                 Subscribe Now
               </Button>
@@ -275,6 +273,13 @@ export default function ProductsServices() {
 
           {selectedService && (
             <div className="space-y-6 pt-4">
+              {error && (
+                <div className="p-3 bg-red-100 border border-red-200 text-red-600 text-sm rounded-lg flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  {error}
+                </div>
+              )}
+
               {/* Service Info */}
               <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg">
                 <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${selectedService.color} flex items-center justify-center text-2xl`}>
@@ -353,11 +358,15 @@ export default function ProductsServices() {
 
               {/* Action Buttons */}
               <div className="flex gap-3">
-                <Button variant="outline" className="flex-1" onClick={() => setIsDialogOpen(false)}>
+                <Button variant="outline" className="flex-1" onClick={() => setIsDialogOpen(false)} disabled={isSubscribing}>
                   Cancel
                 </Button>
-                <Button className="flex-1 bg-blue-600 hover:bg-blue-700">
-                  <Check className="w-4 h-4 mr-2" />
+                <Button 
+                  className="flex-1 bg-blue-600 hover:bg-blue-700" 
+                  onClick={processSubscription}
+                  disabled={isSubscribing}
+                >
+                  {isSubscribing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
                   Start Subscription
                 </Button>
               </div>

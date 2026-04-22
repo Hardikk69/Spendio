@@ -13,34 +13,103 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Bell,
-  CheckCircle2
+  CheckCircle2,
+  Loader2,
+  AlertCircle,
+  Wallet
 } from "lucide-react";
 import { useOutletContext } from "react-router";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { useEffect, useState } from "react";
+import { api } from "../../lib/api";
+
+interface DashboardSummary {
+  active_subscriptions: number;
+  monthly_spending: number;
+  upcoming_payments: number;
+  shared_subscriptions: number;
+  balance: number;
+}
+
+interface SpendingTrend {
+  month: string;
+  amount: number;
+}
+
+interface Subscription {
+  id: string;
+  name: string;
+  status: string;
+  amount: number;
+  next_billing: string;
+  category: string;
+  autopay: boolean;
+  billing_cycle: string;
+}
+
+interface UpcomingBill {
+  subscription: string;
+  amount: number;
+  due_date: string;
+  autopay: boolean;
+}
 
 export default function Dashboard() {
-  const { userRole } = useOutletContext<{ userRole: string }>();
+  const { user } = useOutletContext<{ user: any }>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [spendingTrend, setSpendingTrend] = useState<SpendingTrend[]>([]);
+  const [recentSubs, setRecentSubs] = useState<Subscription[]>([]);
+  const [upcoming, setUpcoming] = useState<UpcomingBill[]>([]);
 
-  const stats = [
+  useEffect(() => {
+    async function fetchDashboardData() {
+      try {
+        setLoading(true);
+        const [summaryData, trendData, subsData, upcomingData] = await Promise.all([
+          api.get<{ summary: DashboardSummary }>("/api/analytics/summary"),
+          api.get<SpendingTrend[]>("/api/analytics/spending-trend"),
+          api.get<{ subscriptions: Subscription[] }>("/api/subscriptions/"),
+          api.get<{ upcoming_bills: UpcomingBill[] }>("/api/billing/upcoming"),
+        ]);
+
+        setSummary(summaryData.summary);
+        setSpendingTrend(trendData);
+        setRecentSubs(subsData.subscriptions.slice(0, 5));
+        setUpcoming(upcomingData.upcoming_bills.slice(0, 3));
+        setError(null);
+      } catch (err: any) {
+        setError(err.message || "Failed to load dashboard data");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchDashboardData();
+  }, []);
+
+  const statsData = summary ? [
     {
       label: "Active Subscriptions",
-      value: "8",
-      change: "+2",
-      trend: "up",
+      value: summary.active_subscriptions.toString(),
+      change: "Stable",
+      trend: "neutral",
       icon: PlayCircle,
       color: "green",
     },
     {
       label: "Monthly Spending",
-      value: "₹15,420",
-      change: "+₹990",
-      trend: "up",
+      value: `₹${summary.monthly_spending.toLocaleString()}`,
+      change: "Current",
+      trend: "neutral",
       icon: DollarSign,
       color: "blue",
     },
     {
-      label: "Upcoming Payments",
-      value: "3",
+      label: "Upcoming (7d)",
+      value: summary.upcoming_payments.toString(),
       change: "Next 7 days",
       trend: "neutral",
       icon: Calendar,
@@ -48,44 +117,21 @@ export default function Dashboard() {
     },
     {
       label: "Shared Subscriptions",
-      value: "2",
-      change: "Saving ₹1,980/mo",
-      trend: "down",
+      value: summary.shared_subscriptions.toString(),
+      change: "Active shares",
+      trend: "neutral",
       icon: CreditCard,
       color: "purple",
     },
-  ];
-
-  const recentSubscriptions = [
-    { name: "Netflix Premium", status: "Active", amount: "₹649", nextBilling: "Feb 20, 2026", category: "OTT", autopay: true },
-    { name: "Spotify Family", status: "Active", amount: "₹1,399", nextBilling: "Feb 22, 2026", category: "Music", autopay: true },
-    { name: "Microsoft 365", status: "Active", amount: "₹799", nextBilling: "Feb 25, 2026", category: "SaaS", autopay: true },
-    { name: "Adobe Creative Cloud", status: "Paused", amount: "₹4,599", nextBilling: "Mar 1, 2026", category: "SaaS", autopay: false },
-    { name: "Disney+", status: "Active", amount: "₹649", nextBilling: "Feb 18, 2026", category: "OTT", autopay: true },
-  ];
-
-  const spendingData = [
-    { month: "Aug", amount: 11760 },
-    { month: "Sep", amount: 13080 },
-    { month: "Oct", amount: 13650 },
-    { month: "Nov", amount: 14400 },
-    { month: "Dec", amount: 15050 },
-    { month: "Jan", amount: 14490 },
-    { month: "Feb", amount: 15470 },
-  ];
-
-  const upcomingPayments = [
-    { service: "Disney+", amount: "₹649", date: "Feb 18", autopay: true },
-    { service: "Netflix Premium", amount: "₹649", date: "Feb 20", autopay: true },
-    { service: "Spotify Family", amount: "₹1,399", date: "Feb 22", autopay: true },
-  ];
-
-  const recentActivity = [
-    { action: "Payment successful", subscription: "Spotify Family", time: "2 hours ago", type: "success" },
-    { action: "Subscription paused", subscription: "Adobe Creative Cloud", time: "1 day ago", type: "warning" },
-    { action: "Auto-pay enabled", subscription: "Microsoft 365", time: "3 days ago", type: "info" },
-    { action: "Renewal reminder", subscription: "Netflix Premium", time: "5 days ago", type: "info" },
-  ];
+    {
+      label: "Wallet Balance",
+      value: `₹${summary.balance.toLocaleString()}`,
+      change: "Available",
+      trend: "neutral",
+      icon: Wallet,
+      color: "cyan",
+    },
+  ] : [];
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { color: string; icon: any }> = {
@@ -104,17 +150,47 @@ export default function Dashboard() {
     );
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-slate-600 animate-pulse">Loading dashboard statistics...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="border-red-200 bg-red-50 max-w-2xl mx-auto mt-12">
+        <CardContent className="pt-6">
+          <div className="flex flex-col items-center text-center gap-4">
+            <AlertCircle className="w-12 h-12 text-red-600" />
+            <div>
+              <h3 className="text-lg font-bold text-red-900">Connection Error</h3>
+              <p className="text-red-700">{error}</p>
+            </div>
+            <Button onClick={() => window.location.reload()} className="bg-red-600 hover:bg-red-700">
+              Retry Connection
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-7xl">
       {/* Welcome Section */}
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Welcome back, Rajesh Kumar!</h1>
-        <p className="text-slate-600">Here's your subscription overview for February 2026</p>
+        <h1 className="text-2xl font-bold text-slate-900">Welcome back, {user?.first_name} {user?.last_name}!</h1>
+        <p className="text-slate-600">Here's your subscription overview for {new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}</p>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat, idx) => {
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        {statsData.map((stat, idx) => {
           const Icon = stat.icon;
           return (
             <Card key={idx}>
@@ -124,18 +200,8 @@ export default function Dashboard() {
                     <p className="text-sm text-slate-600 mb-1">{stat.label}</p>
                     <p className="text-2xl font-bold text-slate-900">{stat.value}</p>
                     <div className="flex items-center gap-1 mt-2">
-                      {stat.trend === "up" ? (
-                        <ArrowUpRight className="w-4 h-4 text-green-600" />
-                      ) : stat.trend === "down" ? (
-                        <ArrowDownRight className="w-4 h-4 text-blue-600" />
-                      ) : (
-                        <Clock className="w-4 h-4 text-orange-600" />
-                      )}
-                      <span className={`text-xs ${
-                        stat.trend === "up" ? "text-green-600" : 
-                        stat.trend === "down" ? "text-blue-600" : 
-                        "text-orange-600"
-                      }`}>
+                      <Clock className="w-3 h-3 text-slate-400" />
+                      <span className="text-xs text-slate-500">
                         {stat.change}
                       </span>
                     </div>
@@ -144,13 +210,15 @@ export default function Dashboard() {
                     stat.color === "green" ? "bg-green-100" :
                     stat.color === "blue" ? "bg-blue-100" :
                     stat.color === "orange" ? "bg-orange-100" :
-                    "bg-purple-100"
+                    stat.color === "purple" ? "bg-purple-100" :
+                    "bg-cyan-100"
                   }`}>
                     <Icon className={`w-6 h-6 ${
                       stat.color === "green" ? "text-green-600" :
                       stat.color === "blue" ? "text-blue-600" :
                       stat.color === "orange" ? "text-orange-600" :
-                      "text-purple-600"
+                      stat.color === "purple" ? "text-purple-600" :
+                      "text-cyan-600"
                     }`} />
                   </div>
                 </div>
@@ -169,7 +237,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={spendingData}>
+              <LineChart data={spendingTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="month" stroke="#64748b" />
                 <YAxis stroke="#64748b" />
@@ -193,28 +261,30 @@ export default function Dashboard() {
                 <CardTitle>Recent Subscriptions</CardTitle>
                 <CardDescription>Your latest subscription activity</CardDescription>
               </div>
-              <Button variant="ghost" size="sm">View All</Button>
+              <Button variant="ghost" size="sm" onClick={() => window.location.href='/subscriptions'}>View All</Button>
             </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {recentSubscriptions.map((sub, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+              {recentSubs.length > 0 ? recentSubs.map((sub) => (
+                <div key={sub.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <p className="font-medium text-slate-900">{sub.name}</p>
                       {getStatusBadge(sub.status)}
                     </div>
-                    <p className="text-xs text-slate-600">Next: {sub.nextBilling}</p>
+                    <p className="text-xs text-slate-600">Next: {sub.next_billing || 'N/A'}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-slate-900">{sub.amount}</p>
+                    <p className="font-semibold text-slate-900">₹{sub.amount}</p>
                     {sub.autopay && (
                       <Badge className="bg-blue-100 text-blue-700 border-0 text-xs mt-1">Auto-pay</Badge>
                     )}
                   </div>
                 </div>
-              ))}
+              )) : (
+                <p className="text-center py-4 text-slate-500">No subscriptions found</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -227,22 +297,24 @@ export default function Dashboard() {
                 <CardTitle>Upcoming Payments</CardTitle>
                 <CardDescription>Next 7 days</CardDescription>
               </div>
-              <Badge className="bg-orange-100 text-orange-700 border-orange-300">
-                <Bell className="w-3 h-3 mr-1" />
-                3 Pending
-              </Badge>
+              {upcoming.length > 0 && (
+                <Badge className="bg-orange-100 text-orange-700 border-orange-300">
+                  <Bell className="w-3 h-3 mr-1" />
+                  {upcoming.length} Pending
+                </Badge>
+              )}
             </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {upcomingPayments.map((payment, idx) => (
+              {upcoming.length > 0 ? upcoming.map((payment, idx) => (
                 <div key={idx} className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-200">
                   <div>
-                    <p className="font-medium text-slate-900">{payment.service}</p>
-                    <p className="text-xs text-slate-600">{payment.date}, 2026</p>
+                    <p className="font-medium text-slate-900">{payment.subscription}</p>
+                    <p className="text-xs text-slate-600">Due: {payment.due_date}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-slate-900">{payment.amount}</p>
+                    <p className="font-semibold text-slate-900">₹{payment.amount}</p>
                     {payment.autopay && (
                       <div className="flex items-center gap-1 mt-1">
                         <CheckCircle2 className="w-3 h-3 text-green-600" />
@@ -251,34 +323,35 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
-              ))}
+              )) : (
+                <p className="text-center py-4 text-slate-500">No upcoming payments</p>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Recent Activity */}
+      {/* Recent Activity Information */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-          <CardDescription>Latest updates on your subscriptions</CardDescription>
+          <CardTitle>About Your Subscription</CardTitle>
+          <CardDescription>Quick information based on your current data</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {recentActivity.map((activity, idx) => (
-              <div key={idx} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <div className={`w-2 h-2 rounded-full mt-1.5 ${
-                  activity.type === "success" ? "bg-green-500" :
-                  activity.type === "warning" ? "bg-orange-500" :
-                  "bg-blue-500"
-                }`} />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-900">{activity.action}</p>
-                  <p className="text-xs text-slate-600">{activity.subscription}</p>
-                </div>
-                <span className="text-xs text-slate-500">{activity.time}</span>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+              <h4 className="font-semibold text-blue-900 mb-1">Optimization Tip</h4>
+              <p className="text-sm text-blue-700">
+                You have {recentSubs.filter(s => s.status === 'Paused').length} paused subscriptions. Review them to save up to 
+                ₹{recentSubs.filter(s => s.status === 'Paused').reduce((acc, s) => acc + s.amount, 0)}/month.
+              </p>
+            </div>
+            <div className="p-4 bg-green-50 rounded-lg border border-green-100">
+              <h4 className="font-semibold text-green-900 mb-1">Savings Alert</h4>
+              <p className="text-sm text-green-700">
+                Switching {recentSubs.filter(s => s.billing_cycle === 'Monthly' && s.amount > 500).length} higher-valued monthly plans to yearly could save you up to 15% annually.
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>

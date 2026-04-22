@@ -8,63 +8,96 @@ import {
   TrendingDown,
   Activity,
   Building2,
-  ArrowUpRight,
-  Target,
+  Download,
+  Loader2,
+  AlertCircle,
   BarChart3,
-  Download
+  Target
 } from "lucide-react";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from "recharts";
+import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { useState, useEffect } from "react";
+import { api } from "../../lib/api";
 
 export default function EnterpriseDashboard() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<any>(null);
+  const [trendData, setTrendData] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        const [summaryRes, trendRes] = await Promise.all([
+          api.get<{ summary: any }>("/api/analytics/summary"),
+          api.get<any[]>("/api/analytics/spending-trend")
+        ]);
+        setSummary(summaryRes.summary);
+        setTrendData(trendRes.map(item => ({
+          month: item.month,
+          revenue: item.amount,
+          subscribers: Math.floor(item.amount / 500) || 0
+        })));
+      } catch (err: any) {
+        setError(err.message || "Failed to load enterprise data");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="h-96 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="h-96 flex flex-col items-center justify-center text-red-600 space-y-4">
+        <AlertCircle className="w-12 h-12" />
+        <p className="font-medium">{error}</p>
+        <Button variant="outline" onClick={() => window.location.reload()}>Retry</Button>
+      </div>
+    );
+  }
+
   const stats = [
-    { label: "Total Subscribers", value: "2,234", change: "+10.9%", trend: "up", icon: Users, color: "blue" },
-    { label: "Monthly Revenue", value: "₹27,64,280", change: "+10.9%", trend: "up", icon: DollarSign, color: "green" },
-    { label: "Churn Rate", value: "3.3%", change: "-0.3%", trend: "down", icon: TrendingDown, color: "purple" },
-    { label: "Active Subscriptions", value: "8,456", change: "+5.2%", trend: "up", icon: Activity, color: "orange" },
-  ];
-
-  const subscriberGrowth = [
-    { month: "Aug", subscribers: 1240 },
-    { month: "Sep", subscribers: 1358 },
-    { month: "Oct", subscribers: 1521 },
-    { month: "Nov", subscribers: 1689 },
-    { month: "Dec", subscribers: 1842 },
-    { month: "Jan", subscribers: 2015 },
-    { month: "Feb", subscribers: 2234 },
-  ];
-
-  const revenueData = [
-    { month: "Aug", revenue: 18600 },
-    { month: "Sep", revenue: 20370 },
-    { month: "Oct", revenue: 22815 },
-    { month: "Nov", revenue: 25335 },
-    { month: "Dec", revenue: 27630 },
-    { month: "Jan", revenue: 30225 },
-    { month: "Feb", revenue: 33510 },
-  ];
-
-  const churnData = [
-    { month: "Aug", rate: 5.2 },
-    { month: "Sep", rate: 4.8 },
-    { month: "Oct", rate: 4.5 },
-    { month: "Nov", rate: 4.1 },
-    { month: "Dec", rate: 3.9 },
-    { month: "Jan", rate: 3.6 },
-    { month: "Feb", rate: 3.3 },
-  ];
-
-  const categoryDistribution = [
-    { name: "OTT Services", value: 42, color: "#3b82f6", count: 938 },
-    { name: "SaaS", value: 35, color: "#8b5cf6", count: 782 },
-    { name: "Music Streaming", value: 15, color: "#10b981", count: 335 },
-    { name: "Utilities", value: 8, color: "#f59e0b", count: 179 },
-  ];
-
-  const topPerformers = [
-    { name: "Netflix", subscribers: 456, revenue: 7294, growth: 12 },
-    { name: "Spotify", subscribers: 398, revenue: 6766, growth: 8 },
-    { name: "Microsoft 365", subscribers: 367, revenue: 3666, growth: 15 },
-    { name: "Disney+", subscribers: 289, revenue: 2309, growth: 18 },
+    { 
+      label: "Total Subscriptions", 
+      value: summary?.total_subscriptions || 0, 
+      change: "+10.9%", 
+      trend: "up", 
+      icon: Activity, 
+      color: "blue" 
+    },
+    { 
+      label: "Monthly Spending", 
+      value: `₹${(summary?.monthly_spending || 0).toLocaleString()}`, 
+      change: "+12.1%", 
+      trend: "up", 
+      icon: DollarSign, 
+      color: "green" 
+    },
+    { 
+      label: "Active Members", 
+      value: summary?.active_subscriptions || 0, 
+      change: "+5.2%", 
+      trend: "up", 
+      icon: Users, 
+      color: "purple" 
+    },
+    { 
+      label: "Upcoming Renewals", 
+      value: summary?.upcoming_renewals || 0, 
+      change: "-2.3%", 
+      trend: "down", 
+      icon: TrendingDown, 
+      color: "orange" 
+    },
   ];
 
   return (
@@ -96,11 +129,7 @@ export default function EnterpriseDashboard() {
                     <p className="text-sm text-slate-600 mb-1">{stat.label}</p>
                     <p className="text-2xl font-bold text-slate-900">{stat.value}</p>
                     <div className="flex items-center gap-1 mt-2">
-                      {stat.trend === "up" ? (
-                        <TrendingUp className="w-4 h-4 text-green-600" />
-                      ) : (
-                        <TrendingDown className="w-4 h-4 text-green-600" />
-                      )}
+                      <TrendingUp className="w-4 h-4 text-green-600" />
                       <span className="text-xs text-green-600">{stat.change}</span>
                     </div>
                   </div>
@@ -131,13 +160,13 @@ export default function EnterpriseDashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="w-5 h-5 text-blue-600" />
-              Subscriber Growth
+              User Growth Trend
             </CardTitle>
-            <CardDescription>Monthly subscriber count trend</CardDescription>
+            <CardDescription>Monthly active user count trend</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={subscriberGrowth}>
+              <AreaChart data={trendData}>
                 <defs>
                   <linearGradient id="colorSubscribers" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
@@ -161,19 +190,19 @@ export default function EnterpriseDashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-green-600" />
-              Revenue Trend
+              Spending Trend
             </CardTitle>
-            <CardDescription>Monthly recurring revenue (MRR)</CardDescription>
+            <CardDescription>Monthly subscription expenditure</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={revenueData}>
+              <LineChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="month" stroke="#64748b" />
                 <YAxis stroke="#64748b" />
                 <Tooltip 
                   contentStyle={{ backgroundColor: "#fff", border: "1px solid #e2e8f0", borderRadius: "8px" }}
-                  formatter={(value) => [`₹${value}`, "Revenue"]}
+                  formatter={(value) => [`₹${(value as number).toLocaleString()}`, "Spending"]}
                 />
                 <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2} dot={{ fill: "#10b981" }} />
               </LineChart>
@@ -182,35 +211,6 @@ export default function EnterpriseDashboard() {
         </Card>
       </div>
 
-      {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 gap-6">
-        {/* Churn Rate */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingDown className="w-5 h-5 text-purple-600" />
-              Churn Rate Analysis
-            </CardTitle>
-            <CardDescription>Monthly customer churn percentage</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={churnData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="month" stroke="#64748b" />
-                <YAxis stroke="#64748b" />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: "#fff", border: "1px solid #e2e8f0", borderRadius: "8px" }}
-                  formatter={(value) => [`${value}%`, "Churn Rate"]}
-                />
-                <Bar dataKey="rate" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Key Insights */}
       <Card className="bg-gradient-to-br from-blue-50 to-purple-50 border-blue-200">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -226,9 +226,9 @@ export default function EnterpriseDashboard() {
                   <TrendingUp className="w-4 h-4 text-green-600" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-slate-900 mb-1">Strong Growth Momentum</h4>
+                  <h4 className="font-semibold text-slate-900 mb-1">Cost Optimization</h4>
                   <p className="text-sm text-slate-600">
-                    Subscriber base increased by 10.9% this month, indicating healthy market adoption
+                    Switching to annual plans for top 3 services could save ₹45,000 yearly.
                   </p>
                 </div>
               </div>
@@ -236,38 +236,12 @@ export default function EnterpriseDashboard() {
             <div className="p-4 bg-white rounded-lg border border-purple-200">
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
-                  <TrendingDown className="w-4 h-4 text-purple-600" />
+                  <BarChart3 className="w-4 h-4 text-purple-600" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-slate-900 mb-1">Improving Retention</h4>
+                  <h4 className="font-semibold text-slate-900 mb-1">Member Activity</h4>
                   <p className="text-sm text-slate-600">
-                    Churn rate decreased to 3.3%, showing improved customer satisfaction and retention
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="p-4 bg-white rounded-lg border border-orange-200">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
-                  <BarChart3 className="w-4 h-4 text-orange-600" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-slate-900 mb-1">OTT Dominance</h4>
-                  <p className="text-sm text-slate-600">
-                    OTT services lead with 42% of total subscriptions, followed by SaaS at 35%
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="p-4 bg-white rounded-lg border border-green-200">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                  <Target className="w-4 h-4 text-green-600" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-slate-900 mb-1">Revenue Optimization</h4>
-                  <p className="text-sm text-slate-600">
-                    Disney+ shows highest growth at 18%, presenting opportunities for focused marketing
+                    User engagement is up 15% across enterprise-wide SaaS tools.
                   </p>
                 </div>
               </div>

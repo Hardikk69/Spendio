@@ -12,42 +12,126 @@ import {
   Receipt,
   CreditCard,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "../../lib/api";
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
+
+interface Transaction {
+  id: string;
+  transaction_id: string;
+  date: string;
+  subscription_name: string;
+  amount: number;
+  status: string;
+  payment_method: string;
+}
+
+interface UpcomingBill {
+  id: string;
+  subscription: string;
+  amount: number;
+  due_date: string;
+  autopay: boolean;
+  status: string;
+}
+
+interface BillingStats {
+  total_spent_year: number;
+  successful_payments: number;
+  failed_payments: number;
+  pending_payments: number;
+}
 
 export default function Billing() {
   const [filterPeriod, setFilterPeriod] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const paymentHistory = [
-    { id: "TXN001", date: "Feb 16, 2026", subscription: "Spotify Family", amount: 1399, status: "Success", method: "Auto-pay", invoice: true },
-    { id: "TXN002", date: "Feb 15, 2026", subscription: "Netflix Premium", amount: 649, status: "Success", method: "Auto-pay", invoice: true },
-    { id: "TXN003", date: "Feb 12, 2026", subscription: "Microsoft 365", amount: 799, status: "Success", method: "Auto-pay", invoice: true },
-    { id: "TXN004", date: "Feb 10, 2026", subscription: "Disney+", amount: 649, status: "Success", method: "Auto-pay", invoice: true },
-    { id: "TXN005", date: "Feb 8, 2026", subscription: "Adobe Creative Cloud", amount: 4599, status: "Failed", method: "Manual", invoice: false },
-    { id: "TXN006", date: "Jan 28, 2026", subscription: "Amazon Prime", amount: 1249, status: "Success", method: "Auto-pay", invoice: true },
-    { id: "TXN007", date: "Jan 22, 2026", subscription: "Dropbox Plus", amount: 999, status: "Success", method: "Manual", invoice: true },
-    { id: "TXN008", date: "Jan 20, 2026", subscription: "Spotify Family", amount: 1399, status: "Success", method: "Auto-pay", invoice: true },
-    { id: "TXN009", date: "Jan 15, 2026", subscription: "Netflix Premium", amount: 649, status: "Success", method: "Auto-pay", invoice: true },
-    { id: "TXN010", date: "Jan 12, 2026", subscription: "Microsoft 365", amount: 799, status: "Refunded", method: "Auto-pay", invoice: true },
-  ];
+  const [paymentHistory, setPaymentHistory] = useState<Transaction[]>([]);
+  const [upcomingBills, setUpcomingBills] = useState<UpcomingBill[]>([]);
+  const [stats, setStats] = useState<BillingStats | null>(null);
 
-  const stats = [
-    { label: "Total Spent (2026)", value: "₹15,420", icon: DollarSign, color: "blue" },
-    { label: "Successful Payments", value: "8", icon: CheckCircle2, color: "green" },
-    { label: "Failed Payments", value: "1", icon: XCircle, color: "red" },
-    { label: "Pending", value: "3", icon: Clock, color: "orange" },
-  ];
+  const fetchBillingData = async (period = filterPeriod) => {
+    try {
+      setLoading(true);
+      const periodQuery = period !== "all" ? `?period=${period}` : "";
+      const [historyData, upcomingData, statsData] = await Promise.all([
+        api.get<{ transactions: Transaction[] }>(`/api/billing/transactions${periodQuery}`),
+        api.get<{ upcoming_bills: UpcomingBill[] }>("/api/billing/upcoming"),
+        api.get<BillingStats>("/api/billing/stats"),
+      ]);
+      setPaymentHistory(historyData.transactions);
+      setUpcomingBills(upcomingData.upcoming_bills);
+      setStats(statsData);
+      setError(null);
+    } catch (err: any) {
+      setError(err.message || "Failed to load billing data");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const upcomingBills = [
-    { subscription: "Disney+", amount: 649, dueDate: "Feb 18, 2026", autopay: true, status: "upcoming" },
-    { subscription: "Netflix Premium", amount: 649, dueDate: "Feb 20, 2026", autopay: true, status: "upcoming" },
-    { subscription: "Spotify Family", amount: 1399, dueDate: "Feb 22, 2026", autopay: true, status: "upcoming" },
-    { subscription: "Microsoft 365", amount: 799, dueDate: "Feb 25, 2026", autopay: true, status: "upcoming" },
-    { subscription: "Amazon Prime", amount: 1249, dueDate: "Feb 28, 2026", autopay: true, status: "upcoming" },
-  ];
+  useEffect(() => {
+    fetchBillingData(filterPeriod);
+  }, [filterPeriod]);
+
+  const handlePayment = async (amount: number, transactionId: string) => {
+    try {
+      // 1. Create Order securely from backend
+      const orderData = await api.post<any>('/api/billing/create-order', {
+        amount: amount,
+      });
+
+      // 2. Initialize Razorpay Checkout
+      const options = {
+        key: orderData.key,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "Spendio",
+        description: "Subscription Payment",
+        order_id: orderData.order_id,
+        handler: async function (response: any) {
+          try {
+            await api.post('/api/billing/verify-payment', {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              transaction_id: transactionId
+            });
+            alert("Payment successful!");
+            fetchBillingData();
+          } catch (err: any) {
+            alert(err.message || "Payment verification failed");
+          }
+        },
+        prefill: {
+          name: "Spendio Member",
+          email: "member@spendio.in",
+        },
+        theme: {
+          color: "#2563EB",
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (response: any) {
+        alert(response.error.description || "Payment failed");
+      });
+      rzp.open();
+    } catch (err: any) {
+      alert(err.message || "Failed to initiate payment");
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { color: string; icon: any }> = {
@@ -66,6 +150,17 @@ export default function Billing() {
     );
   };
 
+  if (loading && paymentHistory.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-slate-600 animate-pulse">Loading billing and payments...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-7xl">
       {/* Header */}
@@ -80,36 +175,72 @@ export default function Billing() {
         </Button>
       </div>
 
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-4 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-red-700">
+              <AlertCircle className="w-5 h-5" />
+              <p>{error}</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={fetchBillingData}>Retry</Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat, idx) => {
-          const Icon = stat.icon;
-          return (
-            <Card key={idx}>
-              <CardContent className="pt-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-sm text-slate-600 mb-1">{stat.label}</p>
-                    <p className="text-2xl font-bold text-slate-900">{stat.value}</p>
-                  </div>
-                  <div className={`p-3 rounded-lg ${
-                    stat.color === "green" ? "bg-green-100" :
-                    stat.color === "blue" ? "bg-blue-100" :
-                    stat.color === "red" ? "bg-red-100" :
-                    "bg-orange-100"
-                  }`}>
-                    <Icon className={`w-6 h-6 ${
-                      stat.color === "green" ? "text-green-600" :
-                      stat.color === "blue" ? "text-blue-600" :
-                      stat.color === "red" ? "text-red-600" :
-                      "text-orange-600"
-                    }`} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <p className="text-sm text-slate-600 mb-1">Total Spent ({new Date().getFullYear()})</p>
+                <p className="text-2xl font-bold text-slate-900">₹{stats?.total_spent_year.toLocaleString() ?? 0}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-blue-100">
+                <DollarSign className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <p className="text-sm text-slate-600 mb-1">Successful</p>
+                <p className="text-2xl font-bold text-slate-900">{stats?.successful_payments ?? 0}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-green-100">
+                <CheckCircle2 className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <p className="text-sm text-slate-600 mb-1">Failed</p>
+                <p className="text-2xl font-bold text-slate-900">{stats?.failed_payments ?? 0}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-red-100">
+                <XCircle className="w-6 h-6 text-red-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <p className="text-sm text-slate-600 mb-1">Pending</p>
+                <p className="text-2xl font-bold text-slate-900">{stats?.pending_payments ?? 0}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-orange-100">
+                <Clock className="w-6 h-6 text-orange-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Upcoming Bills */}
@@ -130,7 +261,7 @@ export default function Billing() {
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {upcomingBills.map((bill, idx) => (
+            {upcomingBills.length > 0 ? upcomingBills.map((bill, idx) => (
               <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-lg border border-orange-200">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
@@ -138,7 +269,7 @@ export default function Billing() {
                   </div>
                   <div>
                     <p className="font-medium text-slate-900">{bill.subscription}</p>
-                    <p className="text-xs text-slate-600">Due: {bill.dueDate}</p>
+                    <p className="text-xs text-slate-600">Due: {bill.due_date}</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -151,7 +282,9 @@ export default function Billing() {
                   )}
                 </div>
               </div>
-            ))}
+            )) : (
+              <p className="text-center py-4 text-slate-500">No upcoming bills</p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -188,33 +321,32 @@ export default function Billing() {
                   <TableHead className="font-semibold">Amount</TableHead>
                   <TableHead className="font-semibold">Method</TableHead>
                   <TableHead className="font-semibold">Status</TableHead>
-                  <TableHead className="font-semibold">Invoice</TableHead>
+                  <TableHead className="font-semibold">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paymentHistory.map((payment) => (
                   <TableRow key={payment.id} className="hover:bg-slate-50">
-                    <TableCell className="font-mono text-sm text-blue-600">{payment.id}</TableCell>
+                    <TableCell className="font-mono text-sm text-blue-600">{payment.transaction_id}</TableCell>
                     <TableCell className="text-slate-700">{payment.date}</TableCell>
-                    <TableCell className="font-medium text-slate-900">{payment.subscription}</TableCell>
+                    <TableCell className="font-medium text-slate-900">{payment.subscription_name}</TableCell>
                     <TableCell className="font-semibold text-slate-900">₹{payment.amount}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-xs">
-                        {payment.method === "Auto-pay" ? (
-                          <><CreditCard className="w-3 h-3 mr-1" />{payment.method}</>
-                        ) : (
-                          payment.method
-                        )}
+                        <CreditCard className="w-3 h-3 mr-1" />
+                        {payment.payment_method}
                       </Badge>
                     </TableCell>
                     <TableCell>{getStatusBadge(payment.status)}</TableCell>
                     <TableCell>
-                      {payment.invoice ? (
+                      {payment.status === "Failed" ? (
+                        <Button variant="outline" size="sm" onClick={() => handlePayment(payment.amount, payment.id)}>
+                          Pay Now
+                        </Button>
+                      ) : (
                         <Button variant="ghost" size="sm" className="h-8">
                           <Download className="w-4 h-4" />
                         </Button>
-                      ) : (
-                        <span className="text-slate-400 text-sm">N/A</span>
                       )}
                     </TableCell>
                   </TableRow>
@@ -226,28 +358,29 @@ export default function Billing() {
       </Card>
 
       {/* Failed Payment Alert */}
-      <Card className="border-red-200 bg-red-50">
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
-            <div className="flex-1">
-              <h4 className="font-semibold text-red-900 mb-1">Payment Failed</h4>
-              <p className="text-sm text-red-700 mb-3">
-                Your payment for <span className="font-medium">Adobe Creative Cloud</span> failed on Feb 8, 2026. 
-                Please update your payment method or retry the payment.
-              </p>
-              <div className="flex gap-2">
-                <Button size="sm" className="bg-red-600 hover:bg-red-700">
-                  Retry Payment
-                </Button>
-                <Button size="sm" variant="outline">
-                  Update Payment Method
-                </Button>
+      {paymentHistory.some(p => p.status === "Failed") && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="font-semibold text-red-900 mb-1">Payment Failed</h4>
+                <p className="text-sm text-red-700 mb-3">
+                  One or more of your payments have failed. Please review your payment history and retry the transactions.
+                </p>
+                <div className="flex gap-2">
+                  <Button size="sm" className="bg-red-600 hover:bg-red-700">
+                    View Failed Payments
+                  </Button>
+                  <Button size="sm" variant="outline">
+                    Update Payment Method
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
