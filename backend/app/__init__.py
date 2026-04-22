@@ -21,22 +21,23 @@ def create_app(config_name=None):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+    # Configure CORS
+    cors_origins = app.config.get("CORS_ORIGINS", ["http://127.0.0.1:5173", "http://localhost:5173"])
     cors.init_app(
         app,
-        resources={r"/api/*": {"origins": app.config.get("CORS_ORIGINS", ["http://localhost:5173"])}},
+        resources={r"/api/*": {"origins": cors_origins}},
         supports_credentials=True,
     )
 
     # Import models so Flask-Migrate can detect them
     with app.app_context():
         from app.models import (  # noqa: F401
-            User, Subscription, Transaction,
-            SharedSubscription, SharedSubscriptionMember, Invitation,
-            NotificationSettings, PaymentSettings,
+            User, Subscription, Billing, Payment, Service,
+            SharedSubscription,SessionToken,Notification,Enterprise,AlembicVersion
         )
 
     # Register blueprints
-    from app.routes import auth_bp, subs_bp, billing_bp, shared_bp, analytics_bp, settings_bp, admin_bp
+    from app.routes import auth_bp, subs_bp, billing_bp, shared_bp, analytics_bp, settings_bp, admin_bp, notifications_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(subs_bp, url_prefix="/api/subscriptions")
@@ -45,6 +46,7 @@ def create_app(config_name=None):
     app.register_blueprint(analytics_bp, url_prefix="/api/analytics")
     app.register_blueprint(settings_bp, url_prefix="/api/settings")
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
+    app.register_blueprint(notifications_bp, url_prefix="/api/notifications")
 
     # Health check
     @app.route("/api/health")
