@@ -1,4 +1,3 @@
-base_model.py
 from sqlalchemy.exc import SQLAlchemyError
 
 class BaseModel:

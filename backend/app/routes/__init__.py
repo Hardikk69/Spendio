@@ -5,8 +5,10 @@ from app.routes.shared import shared_bp
 from app.routes.analytics import analytics_bp
 from app.routes.settings import settings_bp
 from app.routes.admin import admin_bp
+from app.routes.notifications import notifications_bp
 
 __all__ = [
     "auth_bp", "subs_bp", "billing_bp",
     "shared_bp", "analytics_bp", "settings_bp", "admin_bp",
+    "notifications_bp"
 ]

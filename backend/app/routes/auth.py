@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from sqlalchemy.exc import IntegrityError
 from flask_jwt_extended import (
     create_access_token,
     create_refresh_token,
@@ -6,7 +7,7 @@ from flask_jwt_extended import (
     get_jwt_identity,
 )
 from app.extensions import db
-from app.models import User, NotificationSettings, PaymentSettings
+from app.models import User, Notification, Payment
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -17,33 +18,43 @@ def register():
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
-    required = ["first_name", "last_name", "email", "password"]
-    missing = [f for f in required if not data.get(f)]
-    if missing:
-        return jsonify({"error": f"Missing fields: {', '.join(missing)}"}), 400
+    email = (data.get("email") or "").lower().strip()
+    password = data.get("password")
 
-    if User.query.filter_by(email=data["email"].lower()).first():
+    if not email or not password:
+        return jsonify({"error": "Email and password are required"}), 400
+
+    if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already registered"}), 409
 
+    # Accept both 'name' and 'first_name'+'last_name'
+    if data.get("name"):
+        full_name = data["name"].strip()
+    else:
+        first = (data.get("first_name") or "").strip()
+        last = (data.get("last_name") or "").strip()
+        full_name = f"{first} {last}".strip()
+
     user = User(
-        first_name=data["first_name"].strip(),
-        last_name=data["last_name"].strip(),
-        email=data["email"].lower().strip(),
-        phone=data.get("phone"),
-        role="user",
+        name=full_name,
+        email=email,
+        role=data.get("role", "user"),
     )
-    user.set_password(data["password"])
+    user.set_password(password)
 
-    db.session.add(user)
-    db.session.flush()  # get user.id before commit
+    try:
+        db.session.add(user)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"error": "Email already registered"}), 409
+    except Exception as e:
+        db.session.rollback()
+        print("REGISTER ERROR:", str(e))
+        return jsonify({"error": "Internal server error"}), 500
 
-    # Create default settings
-    db.session.add(NotificationSettings(user_id=user.id))
-    db.session.add(PaymentSettings(user_id=user.id))
-    db.session.commit()
-
-    access_token = create_access_token(identity=user.id)
-    refresh_token = create_refresh_token(identity=user.id)
+    access_token = create_access_token(identity=str(user.user_id))
+    refresh_token = create_refresh_token(identity=str(user.user_id))
 
     return jsonify({
         "message": "Registration successful",
@@ -63,8 +74,8 @@ def login():
     if not user or not user.check_password(data["password"]):
         return jsonify({"error": "Invalid email or password"}), 401
 
-    access_token = create_access_token(identity=user.id)
-    refresh_token = create_refresh_token(identity=user.id)
+    access_token = create_access_token(identity=str(user.user_id))
+    refresh_token = create_refresh_token(identity=str(user.user_id))
 
     return jsonify({
         "message": "Login successful",
@@ -78,7 +89,7 @@ def login():
 @jwt_required(refresh=True)
 def refresh():
     user_id = get_jwt_identity()
-    access_token = create_access_token(identity=user_id)
+    access_token = create_access_token(identity=str(user_id))
     return jsonify({"access_token": access_token}), 200
 
 
@@ -97,12 +108,12 @@ def update_me():
     user = User.query.get_or_404(user_id)
     data = request.get_json() or {}
 
-    if "first_name" in data:
-        user.first_name = data["first_name"].strip()
-    if "last_name" in data:
-        user.last_name = data["last_name"].strip()
-    if "phone" in data:
-        user.phone = data["phone"]
+    if "name" in data:
+        user.name = data["name"].strip()
+    elif "first_name" in data or "last_name" in data:
+        first = (data.get("first_name") or user.first_name).strip()
+        last = (data.get("last_name") or user.last_name).strip()
+        user.name = f"{first} {last}".strip()
 
     db.session.commit()
     return jsonify({"message": "Profile updated", "user": user.to_dict()}), 200

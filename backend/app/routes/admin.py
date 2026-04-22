@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from functools import wraps
 from app.extensions import db
-from app.models import User, Subscription, Transaction
+from app.models import User, Subscription, Payment, Billing
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -12,7 +12,7 @@ def require_admin(fn):
     @jwt_required()
     def wrapper(*args, **kwargs):
         user_id = get_jwt_identity()
-        user = User.query.get(user_id)
+        user = User.get_by_id(db.session, user_id)
         if not user or user.role != "admin":
             return jsonify({"error": "Admin access required"}), 403
         return fn(*args, **kwargs)
@@ -25,9 +25,11 @@ def admin_dashboard():
     total_users = User.query.count()
     total_subs = Subscription.query.count()
     active_subs = Subscription.query.filter_by(status="Active").count()
+    
+    # Revenue from all successful payments
     total_revenue = db.session.query(
-        db.func.coalesce(db.func.sum(Transaction.amount), 0)
-    ).filter_by(status="Success").scalar()
+        db.func.coalesce(db.func.sum(Payment.amount_paid), 0)
+    ).filter(Payment.status == "Success").scalar()
 
     return jsonify({
         "total_users": total_users,
@@ -49,11 +51,11 @@ def list_users():
         query = query.filter(
             db.or_(
                 User.email.ilike(f"%{search}%"),
-                User.first_name.ilike(f"%{search}%"),
-                User.last_name.ilike(f"%{search}%"),
+                User.name.ilike(f"%{search}%"),
             )
         )
 
+    # Note: Flask-SQLAlchemy paginate requires a query object
     pagination = query.order_by(User.created_at.desc()).paginate(
         page=page, per_page=per_page, error_out=False
     )
@@ -71,7 +73,8 @@ def list_users():
 @require_admin
 def get_user(user_id):
     user = User.query.get_or_404(user_id)
-    subs = Subscription.query.filter_by(user_id=user_id).all()
+    # Join Subscription with Service for user details
+    subs = db.session.query(Subscription).filter_by(user_id=user_id).all()
     return jsonify({
         "user": user.to_dict(),
         "subscriptions": [s.to_dict() for s in subs],
@@ -96,7 +99,7 @@ def update_user_role(user_id):
 @require_admin
 def delete_user(user_id):
     current_user_id = get_jwt_identity()
-    if user_id == current_user_id:
+    if int(user_id) == int(current_user_id):
         return jsonify({"error": "Cannot delete your own account"}), 400
     user = User.query.get_or_404(user_id)
     db.session.delete(user)

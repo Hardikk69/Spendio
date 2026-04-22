@@ -1,53 +1,53 @@
-import uuid
-import bcrypt
-from datetime import datetime
 from app.extensions import db
+from app.models.base_model import BaseModel
+from sqlalchemy import Column, Integer, String, DateTime
+from datetime import datetime
 
 
-class User(db.Model):
-    __tablename__ = "users"
+class User(db.Model, BaseModel):
+    __tablename__ = 'user'
 
-    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    first_name = db.Column(db.String(100), nullable=False)
-    last_name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(255), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(255), nullable=False)
-    phone = db.Column(db.String(30), nullable=True)
-    role = db.Column(db.String(20), nullable=False, default="user")  # user, admin, enterprise
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    user_id = Column(Integer, primary_key=True)
+    name = Column(String(120))
+    email = Column(String(255))
+    password = Column(String(255))
+    role = Column(String(50))
+    money = Column(Integer, default=10000)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Relationships
-    subscriptions = db.relationship("Subscription", backref="owner", lazy="dynamic", cascade="all, delete-orphan")
-    transactions = db.relationship("Transaction", backref="user", lazy="dynamic", cascade="all, delete-orphan")
-    notification_settings = db.relationship(
-        "NotificationSettings", backref="user", uselist=False, cascade="all, delete-orphan"
-    )
-    payment_settings = db.relationship(
-        "PaymentSettings", backref="user", uselist=False, cascade="all, delete-orphan"
-    )
-    owned_shared_subs = db.relationship(
-        "SharedSubscription", backref="owner", lazy="dynamic", cascade="all, delete-orphan"
-    )
+    def check_password(self, password):
+        return self.password == password
 
-    def set_password(self, password: str):
-        self.password_hash = bcrypt.hashpw(
-            password.encode("utf-8"), bcrypt.gensalt()
-        ).decode("utf-8")
+    def set_password(self, password):
+        self.password = password
 
-    def check_password(self, password: str) -> bool:
-        return bcrypt.checkpw(
-            password.encode("utf-8"), self.password_hash.encode("utf-8")
-        )
+    @property
+    def first_name(self):
+        """Derive first name from the combined name field."""
+        parts = (self.name or "").strip().split(" ", 1)
+        return parts[0] if parts else ""
+
+    @property
+    def last_name(self):
+        """Derive last name from the combined name field."""
+        parts = (self.name or "").strip().split(" ", 1)
+        return parts[1] if len(parts) > 1 else ""
+
+    @property
+    def phone(self):
+        """Placeholder - no phone column in DB yet."""
+        return ""
 
     def to_dict(self):
+        """Serialize to dict, including derived first_name/last_name."""
         return {
-            "id": self.id,
+            "user_id": self.user_id,
+            "name": self.name,
             "first_name": self.first_name,
             "last_name": self.last_name,
-            "full_name": f"{self.first_name} {self.last_name}",
             "email": self.email,
+            "role": self.role or "user",
             "phone": self.phone,
-            "role": self.role,
+            "money": self.money,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

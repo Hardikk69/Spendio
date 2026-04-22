@@ -25,7 +25,30 @@ def register_error_handlers(app):
 
     @app.errorhandler(422)
     def unprocessable(e):
-        return jsonify({"error": "Unprocessable entity", "message": str(e)}), 422
+        return jsonify({"error": "Unprocessable entity", "message": getattr(e, "description", str(e))}), 422
+
+    from app.extensions import jwt
+
+    @jwt.invalid_token_loader
+    def invalid_token_callback(error):
+        return jsonify({
+            "error": "Invalid token",
+            "message": f"Signature verification failed or token is malformed: {error}"
+        }), 422
+
+    @jwt.expired_token_loader
+    def expired_token_callback(jwt_header, jwt_payload):
+        return jsonify({
+            "error": "Token expired",
+            "message": "The token has expired. Please log in again."
+        }), 401
+
+    @jwt.unauthorized_loader
+    def missing_token_callback(error):
+        return jsonify({
+            "error": "Authorization header missing",
+            "message": "Request does not contain an access token or the 'Bearer' prefix is missing."
+        }), 401
 
     @app.errorhandler(500)
     def internal_error(e):

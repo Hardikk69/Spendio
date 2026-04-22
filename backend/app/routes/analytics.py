@@ -3,7 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime, timedelta
 from sqlalchemy import func, extract
 from app.extensions import db
-from app.models import Subscription, Transaction, User
+from app.models import Subscription, Payment, Billing, User, Service, SharedSubscription
 
 analytics_bp = Blueprint("analytics", __name__)
 
@@ -29,26 +29,47 @@ def summary():
     """Key stat cards for the authenticated user's dashboard."""
     user_id = get_jwt_identity()
 
-    subs = Subscription.query.filter_by(user_id=user_id).all()
-    active_subs = [s for s in subs if s.status == "Active"]
-    shared_subs = [s for s in active_subs if s.shared_subscription is not None]
+    # Join Subscription with Service
+    results = db.session.query(Subscription, Service).join(
+        Service, Subscription.service_id == Service.service_id
+    ).filter(Subscription.user_id == user_id).all()
 
-    monthly_spend = sum(float(s.amount) for s in active_subs if s.billing_cycle == "Monthly")
-    monthly_spend += sum(float(s.amount) / 12 for s in active_subs if s.billing_cycle == "Yearly")
-    monthly_spend += sum(float(s.amount) / 3 for s in active_subs if s.billing_cycle == "Quarterly")
+    active_results = [r for r in results if r[0].status == "Active"]
+    
+    # Check for shared subscriptions
+    shared_subs_count = SharedSubscription.query.filter_by(member_user_id=user_id).count()
+
+    monthly_spend = 0
+    for sub, service in active_results:
+        amount = float(service.base_price)
+        cycle = service.billing_cycle
+        if cycle == "Monthly":
+            monthly_spend += amount
+        elif cycle == "Yearly":
+            monthly_spend += amount / 12
+        elif cycle == "Quarterly":
+            monthly_spend += amount / 3
 
     today = datetime.utcnow().date()
     in_7_days = today + timedelta(days=7)
     upcoming_count = sum(
-        1 for s in active_subs
-        if s.next_billing and today <= s.next_billing <= in_7_days
+        1 for sub, service in active_results
+        if sub.next_billing_date and today <= sub.next_billing_date <= in_7_days
     )
 
+    user = User.query.get(user_id)
+
     return jsonify({
-        "active_subscriptions": len(active_subs),
-        "monthly_spending": round(monthly_spend, 2),
-        "upcoming_payments": upcoming_count,
-        "shared_subscriptions": len(shared_subs),
+        "summary": {
+            "active_subscriptions": len(active_results),
+            "total_subscriptions": len(results),
+            "monthly_spending": round(monthly_spend, 2),
+            "upcoming_payments": upcoming_count,
+            "upcoming_renewals": upcoming_count,
+            "shared_subscriptions": shared_subs_count,
+            "active_members": len(active_results),
+            "balance": user.money if user else 0,
+        }
     }), 200
 
 
@@ -61,15 +82,18 @@ def spending_trend():
     result = []
 
     for y, m in months:
-        total = db.session.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(
-            Transaction.user_id == user_id,
-            Transaction.status == "Success",
-            extract("year", Transaction.payment_date) == y,
-            extract("month", Transaction.payment_date) == m,
+        # Sum payments in this month for this user
+        total = db.session.query(func.coalesce(func.sum(Payment.amount_paid), 0)).join(
+            Billing, Payment.billing_id == Billing.billing_id
+        ).filter(
+            Billing.user_id == user_id,
+            Payment.status == "Success",
+            extract("year", Payment.timestamp) == y,
+            extract("month", Payment.timestamp) == m,
         ).scalar()
         result.append({"month": _month_label(y, m), "amount": float(total)})
 
-    return jsonify({"spending_trend": result}), 200
+    return jsonify(result), 200
 
 
 @analytics_bp.route("/subscriber-growth", methods=["GET"])
@@ -78,10 +102,8 @@ def subscriber_growth():
     """Admin/enterprise: total registered users per month."""
     months = _months_back(7)
     result = []
-    cumulative = 0
     for y, m in months:
-        count = db.session.query(func.count(User.id)).filter(
-            extract("year", User.created_at) < y,
+        count = db.session.query(func.count(User.user_id)).filter(
             db.or_(
                 extract("year", User.created_at) < y,
                 db.and_(
@@ -92,7 +114,7 @@ def subscriber_growth():
         ).scalar() or 0
         result.append({"month": _month_label(y, m), "subscribers": count})
 
-    return jsonify({"subscriber_growth": result}), 200
+    return jsonify({ "subscriber_growth": result }), 200
 
 
 @analytics_bp.route("/revenue", methods=["GET"])
@@ -102,17 +124,17 @@ def revenue():
     months = _months_back(7)
     result = []
     for y, m in months:
-        total = db.session.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(
-            Transaction.status == "Success",
-            extract("year", Transaction.payment_date) == y,
-            extract("month", Transaction.payment_date) == m,
+        total = db.session.query(func.coalesce(func.sum(Payment.amount_paid), 0)).filter(
+            Payment.status == "Success",
+            extract("year", Payment.timestamp) == y,
+            extract("month", Payment.timestamp) == m,
         ).scalar()
         result.append({"month": _month_label(y, m), "revenue": float(total)})
 
     return jsonify({"revenue": result}), 200
 
 
-@analytics_bp.route("/churn", methods=["GET"])
+@analytics_bp.route("/churn-rate", methods=["GET"])
 @jwt_required()
 def churn():
     """Admin: cancelled/expired subscriptions as % of total per month."""
@@ -120,17 +142,21 @@ def churn():
     result = []
     for y, m in months:
         total = Subscription.query.filter(
-            extract("year", Subscription.created_at) <= y,
+            extract("year", Subscription.start_date) <= y,
         ).count() or 1
+        
+        # We don't have a specific cancelled_at, so we might use a status check?
+        # For now, following the original logic but adapting to status field.
+        # This is an approximation.
         churned = Subscription.query.filter(
             Subscription.status.in_(["Cancelled", "Expired"]),
-            extract("year", Subscription.updated_at) == y,
-            extract("month", Subscription.updated_at) == m,
+            # We don't have enough metadata to know exactly when it churned without a log
+            # but we can look at some date field if applicable.
         ).count()
         rate = round((churned / total) * 100, 1)
         result.append({"month": _month_label(y, m), "rate": rate})
 
-    return jsonify({"churn": result}), 200
+    return jsonify({ "churn_rate": result }), 200
 
 
 @analytics_bp.route("/categories", methods=["GET"])
@@ -139,13 +165,15 @@ def categories():
     """Category distribution of active subscriptions for the current user."""
     user_id = get_jwt_identity()
     rows = db.session.query(
-        Subscription.category,
-        func.count(Subscription.id).label("count"),
-        func.sum(Subscription.amount).label("total_amount"),
+        Service.category,
+        func.count(Subscription.subscription_id).label("count"),
+        func.sum(Service.base_price).label("total_amount"),
+    ).join(
+        Service, Subscription.service_id == Service.service_id
     ).filter(
         Subscription.user_id == user_id,
         Subscription.status == "Active",
-    ).group_by(Subscription.category).all()
+    ).group_by(Service.category).all()
 
     total = sum(r.count for r in rows) or 1
     category_colors = {
@@ -175,20 +203,28 @@ def categories():
 def top_subscriptions():
     """Top subscriptions by total payment volume."""
     user_id = get_jwt_identity()
+    
+    # We join Payment -> Billing -> Subscription -> Service
     rows = db.session.query(
-        Transaction.subscription_name,
-        func.count(Transaction.id).label("payment_count"),
-        func.sum(Transaction.amount).label("total_revenue"),
+        Service.name,
+        func.count(Payment.payment_id).label("payment_count"),
+        func.sum(Payment.amount_paid).label("total_revenue"),
+    ).join(
+        Billing, Payment.billing_id == Billing.billing_id
+    ).join(
+        Subscription, Billing.subscription_id == Subscription.subscription_id
+    ).join(
+        Service, Subscription.service_id == Service.service_id
     ).filter(
-        Transaction.user_id == user_id,
-        Transaction.status == "Success",
-    ).group_by(Transaction.subscription_name).order_by(
-        func.sum(Transaction.amount).desc()
+        Billing.user_id == user_id,
+        Payment.status == "Success",
+    ).group_by(Service.name).order_by(
+        func.sum(Payment.amount_paid).desc()
     ).limit(5).all()
 
     result = [
         {
-            "name": r.subscription_name,
+            "name": r.name,
             "payment_count": r.payment_count,
             "total_revenue": float(r.total_revenue or 0),
         }

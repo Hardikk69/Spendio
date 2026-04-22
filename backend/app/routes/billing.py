@@ -1,9 +1,11 @@
-billing.py
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime, date, timedelta
+import os
+import razorpay
 from app.extensions import db
 from app.models import Payment, Billing, Subscription, Service
+from app.services.notification_service import create_notification
 
 billing_bp = Blueprint("billing", __name__)
 
@@ -82,6 +84,114 @@ def retry_payment(txn_id):
     db.session.commit()
     return jsonify({"message": "Payment retry successful", "transaction": payment.to_dict()}), 200
 
+
+@billing_bp.route("/create-order", methods=["POST"])
+@jwt_required()
+def create_order():
+    user_id = get_jwt_identity()
+    data = request.get_json() or {}
+    
+    amount = data.get("amount")
+    if not amount:
+        return jsonify({"error": "amount is required"}), 400
+        
+    try:
+        # Initialize Razorpay client
+        key_id = os.environ.get("RAZORPAY_KEY_ID", "")
+        key_secret = os.environ.get("RAZORPAY_KEY_SECRET", "")
+        
+        # Multiply by 100 as razorpay handles amount in subunits (paise)
+        order_amount = int(float(amount) * 100)
+        order_currency = "INR"
+        
+        # Dummy order generation if test keys are dummy placeholders
+        if key_id == "rzp_test_dummykey123456":
+            import uuid
+            order = {
+                "id": "order_" + uuid.uuid4().hex[:14],
+                "amount": order_amount,
+                "currency": order_currency
+            }
+        else:
+            client = razorpay.Client(auth=(key_id, key_secret))
+            order = client.order.create({
+                "amount": order_amount,
+                "currency": order_currency,
+                "payment_capture": "1"
+            })
+            
+        return jsonify({
+            "order_id": order["id"],
+            "amount": order["amount"],
+            "currency": order["currency"],
+            "key": key_id
+        }), 200
+        
+    except Exception as e:
+        print("Create Order Error:", str(e))
+        return jsonify({"error": "Failed to create order"}), 500
+
+
+@billing_bp.route("/verify-payment", methods=["POST"])
+@jwt_required()
+def verify_payment():
+    user_id = get_jwt_identity()
+    data = request.get_json() or {}
+    
+    razorpay_order_id = data.get("razorpay_order_id")
+    razorpay_payment_id = data.get("razorpay_payment_id")
+    razorpay_signature = data.get("razorpay_signature")
+    transaction_id = data.get("transaction_id")
+    
+    try:
+        key_id = os.environ.get("RAZORPAY_KEY_ID", "")
+        key_secret = os.environ.get("RAZORPAY_KEY_SECRET", "")
+        
+        if key_id != "rzp_test_dummykey123456":
+            # Verify signature using Razorpay client
+            client = razorpay.Client(auth=(key_id, key_secret))
+            client.utility.verify_payment_signature({
+                'razorpay_order_id': razorpay_order_id,
+                'razorpay_payment_id': razorpay_payment_id,
+                'razorpay_signature': razorpay_signature
+            })
+            
+        # Signature is valid (or dummy validation passed)
+        if transaction_id:
+            # Updating a specific failed payment to Success
+            payment = db.session.query(Payment).join(
+                Billing, Payment.billing_id == Billing.billing_id
+            ).filter(Payment.payment_id == transaction_id, Billing.user_id == user_id).first()
+            
+            if payment:
+                payment.status = "Success"
+                payment.method = "Razorpay"
+                db.session.commit()
+                
+                # Retrieve subscription/service name
+                sub_name = db.session.query(Service.name).join(
+                    Subscription, Service.service_id == Subscription.service_id
+                ).join(
+                    Billing, Subscription.subscription_id == Billing.subscription_id
+                ).filter(Billing.billing_id == payment.billing_id).scalar()
+                
+                create_notification(
+                    user_id=user_id,
+                    n_type="payment",
+                    title="Payment Successful",
+                    message=f"Your payment of ₹{payment.amount_paid} for {sub_name or 'subscription'} was processed successfully."
+                )
+
+        return jsonify({
+            "message": "Payment verified successfully",
+            "status": "success"
+        }), 200
+        
+    except razorpay.errors.SignatureVerificationError:
+        return jsonify({"error": "Payment signature verification failed"}), 400
+    except Exception as e:
+        print("Verify Payment Error:", str(e))
+        return jsonify({"error": "Failed to verify payment"}), 500
 
 @billing_bp.route("/upcoming", methods=["GET"])
 @jwt_required()
