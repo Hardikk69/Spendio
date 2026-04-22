@@ -1,10 +1,8 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.extensions import db
-from app.models import (
-    SharedSubscription, SharedSubscriptionMember,
-    Invitation, Subscription, User
-)
+from app.models import SharedSubscription, Subscription, User, Service
+from app.services.notification_service import create_notification
 
 shared_bp = Blueprint("shared", __name__)
 
@@ -12,192 +10,190 @@ shared_bp = Blueprint("shared", __name__)
 @shared_bp.route("/", methods=["GET"])
 @jwt_required()
 def list_shared():
+    """List shared subscriptions for the current user."""
     user_id = get_jwt_identity()
 
-    # Subscriptions owned by user that are shared
-    owned = SharedSubscription.query.filter_by(owner_id=user_id).all()
-
-    # Subscriptions user is a member of (but not owner)
-    member_rows = SharedSubscriptionMember.query.filter(
-        SharedSubscriptionMember.user_id == user_id,
-        SharedSubscriptionMember.role == "member",
-    ).all()
-
-    member_shared_ids = {m.shared_sub_id for m in member_rows}
-    member_shared = SharedSubscription.query.filter(
-        SharedSubscription.id.in_(member_shared_ids)
-    ).all() if member_shared_ids else []
-
-    all_shared = {s.id: s for s in owned + member_shared}
+    shares = SharedSubscription.query.filter_by(member_user_id=user_id).all()
 
     result = []
-    for shared in all_shared.values():
-        sub = shared.subscription
-        members = shared.members.all()
-        my_member = next(
-            (m for m in members if m.user_id == user_id), None
-        )
-        owner = shared.owner
+    for share in shares:
+        sub_id = share.subscription_id
+        sub_data = db.session.query(Subscription, Service).join(
+            Service, Subscription.service_id == Service.service_id
+        ).filter(Subscription.subscription_id == sub_id).first()
+
+        if not sub_data:
+            continue
+
+        sub, service = sub_data
+
+        # Determine role: Owner if the subscription's user_id matches current user
+        is_owner = str(sub.user_id) == str(user_id)
+
+        # Get all members for this shared subscription
+        all_shares = SharedSubscription.query.filter_by(subscription_id=sub_id).all()
+        members = []
+        for s in all_shares:
+            member_user = User.query.get(s.member_user_id)
+            if member_user:
+                name = (
+                    f"{member_user.first_name or ''} {member_user.last_name or ''}".strip()
+                    or member_user.email
+                )
+                members.append({
+                    "id": s.id,
+                    "name": name,
+                    "email": member_user.email,
+                    "share_amount": float(s.amount_owned),
+                    "status": "Accepted",
+                })
 
         result.append({
-            "id": shared.id,
-            "subscription_id": shared.subscription_id,
-            "name": sub.name if sub else "Unknown",
-            "total_cost": float(shared.total_cost),
-            "members_count": len(members),
-            "your_share": float(my_member.share_amount) if my_member else 0,
-            "role": my_member.role if my_member else ("owner" if shared.owner_id == user_id else "member"),
-            "status": sub.status if sub else "Unknown",
-            "members": [m.to_dict() for m in members],
+            "id": share.id,
+            "subscription_id": sub_id,
+            "subscription_name": service.name,
+            "total_amount": float(service.base_price),
+            "your_share": float(share.amount_owned),
+            "member_count": len(all_shares),
+            "role": "Owner" if is_owner else "Member",
+            "status": sub.status,
+            "billing_cycle": service.billing_cycle,
+            "members": members,
         })
 
-    return jsonify({"shared_subscriptions": result}), 200
+    return jsonify({"shares": result}), 200
 
 
-@shared_bp.route("/", methods=["POST"])
+@shared_bp.route("/invitations", methods=["GET"])
 @jwt_required()
-def create_shared():
+def list_invitations():
+    """Pending invitations stub - returns empty list until invitation model is added."""
+    return jsonify({"invitations": []}), 200
+
+
+@shared_bp.route("/invite", methods=["POST"])
+@jwt_required()
+def invite_member():
+    """Invite a user to share a subscription by email."""
     user_id = get_jwt_identity()
     data = request.get_json() or {}
 
-    required = ["subscription_id"]
-    if not data.get("subscription_id"):
-        return jsonify({"error": "subscription_id is required"}), 400
+    subscription_id = data.get("subscription_id")
+    email = (data.get("email") or "").strip().lower()
 
-    sub = Subscription.query.filter_by(id=data["subscription_id"], user_id=user_id).first_or_404(
-        description="Subscription not found"
-    )
+    if not subscription_id or not email:
+        return jsonify({"error": "subscription_id and email are required"}), 400
 
-    if sub.shared_subscription:
-        return jsonify({"error": "Subscription is already shared"}), 409
+    # Ensure the current user owns this subscription
+    sub = Subscription.query.filter_by(
+        subscription_id=subscription_id,
+        user_id=user_id
+    ).first()
+    if not sub:
+        return jsonify({"error": "Subscription not found or not owned by you"}), 404
+
+    # Find the invitee
+    invitee = User.query.filter_by(email=email).first()
+    if not invitee:
+        return jsonify({"error": "No user registered with that email address"}), 404
+
+    # Check if already a member
+    existing = SharedSubscription.query.filter_by(
+        subscription_id=subscription_id,
+        member_user_id=invitee.user_id
+    ).first()
+    if existing:
+        return jsonify({"error": "This user already has access to this subscription"}), 409
+
+    # Get service info
+    service = Service.query.get(sub.service_id)
+    if not service:
+        return jsonify({"error": "Service info not found"}), 404
+
+    # Calculate split
+    existing_count = SharedSubscription.query.filter_by(subscription_id=subscription_id).count()
+    total_members = existing_count + 1
+    split_amount = round(float(service.base_price) / total_members, 2)
+    split_percent = int(100 / total_members)
 
     shared = SharedSubscription(
-        subscription_id=sub.id,
-        owner_id=user_id,
-        total_cost=sub.amount,
+        subscription_id=subscription_id,
+        member_user_id=invitee.user_id,
+        shared_percent=split_percent,
+        amount_owned=split_amount
     )
     db.session.add(shared)
-    db.session.flush()
-
-    user = User.query.get(user_id)
-    # Add owner as first member
-    owner_member = SharedSubscriptionMember(
-        shared_sub_id=shared.id,
-        user_id=user_id,
-        email=user.email,
-        display_name=f"{user.first_name} {user.last_name}",
-        share_amount=sub.amount,
-        role="owner",
-        payment_status="paid",
-    )
-    db.session.add(owner_member)
     db.session.commit()
 
-    return jsonify({"message": "Shared subscription created", "shared": shared.to_dict()}), 201
+    # Trigger notification to the invitee
+    inviter_name = "Someone"
+    inviter = User.query.get(user_id)
+    if inviter:
+        inviter_name = f"{inviter.first_name or ''} {inviter.last_name or ''}".strip() or inviter.email
+
+    create_notification(
+        user_id=invitee.user_id,
+        n_type="share",
+        title="Shared Subscription Invite",
+        message=f"{inviter_name} has invited you to share a subscription for {service.name}."
+    )
+
+    return jsonify({"message": f"Invitation sent to {email}"}), 201
+
+
+@shared_bp.route("/<int:share_id>/accept", methods=["POST"])
+@jwt_required()
+def accept_invitation(share_id):
+    """Accept a shared subscription invitation."""
+    user_id = get_jwt_identity()
+    SharedSubscription.query.filter_by(
+        id=share_id, member_user_id=user_id
+    ).first_or_404()
+    # In this model, the record existing means it's accepted
+    return jsonify({"message": "Invitation accepted"}), 200
+
+
+@shared_bp.route("/<int:share_id>/reject", methods=["POST"])
+@jwt_required()
+def reject_invitation(share_id):
+    """Reject/decline a shared subscription invitation."""
+    user_id = get_jwt_identity()
+    share = SharedSubscription.query.filter_by(
+        id=share_id, member_user_id=user_id
+    ).first_or_404()
+    db.session.delete(share)
+    db.session.commit()
+    return jsonify({"message": "Invitation declined"}), 200
+
+
+@shared_bp.route("/<int:share_id>", methods=["DELETE"])
+@jwt_required()
+def leave_shared(share_id):
+    """Leave a shared subscription."""
+    user_id = get_jwt_identity()
+    share = SharedSubscription.query.filter_by(
+        id=share_id, member_user_id=user_id
+    ).first_or_404()
+    db.session.delete(share)
+    db.session.commit()
+    return jsonify({"message": "Left shared subscription"}), 200
 
 
 @shared_bp.route("/stats", methods=["GET"])
 @jwt_required()
 def shared_stats():
     user_id = get_jwt_identity()
+    shares = SharedSubscription.query.filter_by(member_user_id=user_id).all()
 
-    owned = SharedSubscription.query.filter_by(owner_id=user_id).all()
-    member_rows = SharedSubscriptionMember.query.filter(
-        SharedSubscriptionMember.user_id == user_id
-    ).all()
+    total_savings = 0
+    for share in shares:
+        service = db.session.query(Service).join(
+            Subscription, Subscription.service_id == Service.service_id
+        ).filter(Subscription.subscription_id == share.subscription_id).first()
+        if service:
+            total_savings += float(service.base_price) - float(share.amount_owned)
 
-    total_members = sum(s.members.count() for s in owned)
-    monthly_savings = sum(
-        float(s.total_cost) - float(
-            next((m.share_amount for m in s.members.all() if m.user_id == user_id), s.total_cost)
-        )
-        for s in owned
-    )
-
-    all_shared_ids = set(s.id for s in owned) | set(m.shared_sub_id for m in member_rows)
     return jsonify({
-        "shared_subscriptions": len(all_shared_ids),
-        "monthly_savings": round(monthly_savings, 2),
-        "total_members": total_members,
+        "shared_subscriptions": len(shares),
+        "monthly_savings": round(total_savings, 2),
     }), 200
-
-
-@shared_bp.route("/invitations", methods=["GET"])
-@jwt_required()
-def list_invitations():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-
-    pending = Invitation.query.filter_by(
-        invitee_email=user.email, status="pending"
-    ).order_by(Invitation.created_at.desc()).all()
-
-    return jsonify({"invitations": [i.to_dict() for i in pending]}), 200
-
-
-@shared_bp.route("/invitations/<inv_id>/accept", methods=["POST"])
-@jwt_required()
-def accept_invitation(inv_id):
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    inv = Invitation.query.filter_by(id=inv_id, invitee_email=user.email, status="pending").first_or_404()
-
-    inv.status = "accepted"
-
-    # Add user as member
-    member = SharedSubscriptionMember(
-        shared_sub_id=inv.shared_sub_id,
-        user_id=user_id,
-        email=user.email,
-        display_name=f"{user.first_name} {user.last_name}",
-        share_amount=inv.share_amount,
-        role="member",
-        payment_status="pending",
-    )
-    db.session.add(member)
-    db.session.commit()
-
-    return jsonify({"message": "Invitation accepted"}), 200
-
-
-@shared_bp.route("/invitations/<inv_id>/decline", methods=["POST"])
-@jwt_required()
-def decline_invitation(inv_id):
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    inv = Invitation.query.filter_by(id=inv_id, invitee_email=user.email, status="pending").first_or_404()
-    inv.status = "declined"
-    db.session.commit()
-    return jsonify({"message": "Invitation declined"}), 200
-
-
-@shared_bp.route("/<shared_id>/invite", methods=["POST"])
-@jwt_required()
-def send_invite(shared_id):
-    user_id = get_jwt_identity()
-    shared = SharedSubscription.query.filter_by(id=shared_id, owner_id=user_id).first_or_404(
-        description="Shared subscription not found or you are not the owner"
-    )
-    data = request.get_json() or {}
-
-    if not data.get("email"):
-        return jsonify({"error": "email is required"}), 400
-
-    members_count = shared.members.count()
-    new_share = round(float(shared.total_cost) / (members_count + 1), 2)
-
-    inv = Invitation(
-        shared_sub_id=shared.id,
-        inviter_id=user_id,
-        invitee_email=data["email"].lower().strip(),
-        status="pending",
-        share_amount=new_share,
-    )
-    db.session.add(inv)
-    db.session.commit()
-
-    return jsonify({
-        "message": f"Invitation sent to {data['email']}",
-        "share_amount": new_share,
-        "invitation": inv.to_dict(),
-    }), 201
