@@ -12,7 +12,7 @@ class User(db.Model, BaseModel):
     email = Column(String(255))
     password = Column(String(255))
     role = Column(String(50))
-    money = Column(Integer, default=10000)
+    money = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     def check_password(self, password):
