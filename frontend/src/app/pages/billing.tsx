@@ -1,8 +1,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
-import { 
-  Download, 
+import {
+  Download,
   Filter,
   CheckCircle2,
   XCircle,
@@ -13,12 +13,14 @@ import {
   CreditCard,
   TrendingUp,
   AlertCircle,
-  Loader2
+  Loader2,
+  FastForward
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
+import { useAuth } from "../../hooks/useAuth";
+import { useEffect, useState } from "react";
 
 declare global {
   interface Window {
@@ -56,7 +58,9 @@ export default function Billing() {
   const [filterPeriod, setFilterPeriod] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [simulating, setSimulating] = useState(false);
 
+  const { user } = useAuth();
   const [paymentHistory, setPaymentHistory] = useState<Transaction[]>([]);
   const [upcomingBills, setUpcomingBills] = useState<UpcomingBill[]>([]);
   const [stats, setStats] = useState<BillingStats | null>(null);
@@ -85,16 +89,51 @@ export default function Billing() {
     fetchBillingData(filterPeriod);
   }, [filterPeriod]);
 
+  const handleSimulateAutopay = async () => {
+    if (simulating) return;
+    try {
+      setSimulating(true);
+      const result = await api.post<any>('/api/billing/simulate-autopay', {});
+      alert(`✅ ${result.message}\n\nNew Balance: ₹${result.new_balance}`);
+      fetchBillingData();
+    } catch (err: any) {
+      alert(err.message || 'Simulation failed');
+    } finally {
+      setSimulating(false);
+    }
+  };
+
+  const loadRazorpay = () => {
+    return new Promise((resolve) => {
+      if (window.Razorpay) {
+        resolve(true);
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
   const handlePayment = async (amount: number, transactionId: string) => {
     try {
       // 1. Create Order securely from backend
+      const razorpayLoaded = await loadRazorpay();
+      if (!razorpayLoaded) {
+        alert("Failed to load payment gateway. Please try again.");
+        return;
+      }
+
       const orderData = await api.post<any>('/api/billing/create-order', {
         amount: amount,
       });
 
       // 2. Initialize Razorpay Checkout
       const options = {
-        key: orderData.key,
+        key: orderData.key || import.meta.env.VITE_RAZORPAY_KEY_ID,
         amount: orderData.amount,
         currency: orderData.currency,
         name: "Spendio",
@@ -108,25 +147,36 @@ export default function Billing() {
               razorpay_signature: response.razorpay_signature,
               transaction_id: transactionId
             });
-            alert("Payment successful!");
+            alert("Payment successful! Your balance has been updated.");
             fetchBillingData();
           } catch (err: any) {
-            alert(err.message || "Payment verification failed");
+            alert(err.message || "Payment verification failed. Please contact support if amount was deducted.");
           }
         },
         prefill: {
-          name: "Spendio Member",
-          email: "member@spendio.in",
+          name: user ? `${user.first_name} ${user.last_name}` : "Spendio Member",
+          email: user?.email || "member@spendio.in",
+          contact: user?.phone || "",
         },
         theme: {
           color: "#2563EB",
         },
+        modal: {
+          ondismiss: function() {
+            console.log("Checkout modal closed by user");
+          },
+          escape: true,
+          backdropclose: false
+        }
       };
 
       const rzp = new window.Razorpay(options);
+      
       rzp.on('payment.failed', function (response: any) {
-        alert(response.error.description || "Payment failed");
+        console.error("Razorpay Payment Failed:", response.error);
+        alert(`Payment Failed: ${response.error.description}`);
       });
+
       rzp.open();
     } catch (err: any) {
       alert(err.message || "Failed to initiate payment");
@@ -169,10 +219,25 @@ export default function Billing() {
           <h1 className="text-2xl font-bold text-slate-900">Billing & Payments</h1>
           <p className="text-slate-600">Track your payment history and upcoming bills</p>
         </div>
-        <Button variant="outline">
-          <Download className="w-4 h-4 mr-2" />
-          Export
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+            onClick={handleSimulateAutopay}
+            disabled={simulating}
+          >
+            {simulating ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <FastForward className="w-4 h-4 mr-2" />
+            )}
+            {simulating ? 'Simulating...' : 'Simulate Auto-pay'}
+          </Button>
+          <Button variant="outline">
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -182,7 +247,7 @@ export default function Billing() {
               <AlertCircle className="w-5 h-5" />
               <p>{error}</p>
             </div>
-            <Button size="sm" variant="outline" onClick={fetchBillingData}>Retry</Button>
+            <Button size="sm" variant="outline" onClick={() => fetchBillingData()}>Retry</Button>
           </CardContent>
         </Card>
       )}

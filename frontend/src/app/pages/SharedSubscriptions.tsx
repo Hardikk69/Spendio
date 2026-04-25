@@ -2,6 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
+import { Slider } from "../components/ui/slider";
 import { 
   Users, 
   Plus, 
@@ -14,7 +15,8 @@ import {
   Loader2,
   AlertCircle,
   TrendingUp,
-  X
+  X,
+  Percent
 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
@@ -28,14 +30,17 @@ interface ShareMember {
   name: string;
   email: string;
   share_amount: number;
+  share_percent: number;
   status: string;
 }
 
 interface SharedSubscription {
   id: string;
+  subscription_id: number;
   subscription_name: string;
   total_amount: number;
   your_share: number;
+  your_percent: number;
   member_count: number;
   role: string;
   status: string;
@@ -53,6 +58,7 @@ interface Invitation {
 interface UserSubscription {
   id: string;
   name: string;
+  amount: number;
 }
 
 export default function SharedSubscriptions() {
@@ -67,9 +73,17 @@ export default function SharedSubscriptions() {
   // Form State
   const [inviteForm, setInviteForm] = useState({
     subscriptionId: "",
-    email: ""
+    email: "",
+    sharePercent: 50,
+    useCustomPercent: false,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Get the selected subscription's amount for preview calculations
+  const selectedSubAmount = (() => {
+    const sub = userSubscriptions.find(s => s.id === inviteForm.subscriptionId);
+    return sub?.amount || 0;
+  })();
 
   const fetchData = async () => {
     try {
@@ -77,11 +91,11 @@ export default function SharedSubscriptions() {
       const [sharesData, invitesData, subsData] = await Promise.all([
         api.get<{ shares: SharedSubscription[] }>("/api/shared/"),
         api.get<{ invitations: Invitation[] }>("/api/shared/invitations"),
-        api.get<{ subscriptions: any[] }>("/api/subscriptions/"), // To populate invite dropdown
+        api.get<{ subscriptions: any[] }>("/api/subscriptions/"),
       ]);
       setSharedSubscriptions(sharesData.shares);
       setInvitations(invitesData.invitations);
-      setUserSubscriptions(subsData.subscriptions.map(s => ({ id: s.id, name: s.name })));
+      setUserSubscriptions(subsData.subscriptions.map(s => ({ id: s.id, name: s.name, amount: s.amount })));
       setError(null);
     } catch (err: any) {
       setError(err.message || "Failed to load shared subscriptions");
@@ -98,12 +112,16 @@ export default function SharedSubscriptions() {
     if (!inviteForm.subscriptionId || !inviteForm.email) return;
     try {
       setIsSubmitting(true);
-      await api.post("/api/shared/invite", {
+      const payload: any = {
         subscription_id: inviteForm.subscriptionId,
-        email: inviteForm.email
-      });
+        email: inviteForm.email,
+      };
+      if (inviteForm.useCustomPercent) {
+        payload.share_percent = inviteForm.sharePercent;
+      }
+      await api.post("/api/shared/invite", payload);
       setIsInviteDialogOpen(false);
-      setInviteForm({ subscriptionId: "", email: "" });
+      setInviteForm({ subscriptionId: "", email: "", sharePercent: 50, useCustomPercent: false });
       fetchData();
       alert("Invitation sent successfully!");
     } catch (err: any) {
@@ -155,19 +173,25 @@ export default function SharedSubscriptions() {
           <h1 className="text-2xl font-bold text-slate-900">Shared Subscriptions</h1>
           <p className="text-slate-600">View subscriptions split with friends and family</p>
         </div>
-        <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
+        <Dialog open={isInviteDialogOpen} onOpenChange={(open) => {
+          setIsInviteDialogOpen(open);
+          if (!open) {
+            setInviteForm({ subscriptionId: "", email: "", sharePercent: 50, useCustomPercent: false });
+          }
+        }}>
           <DialogTrigger asChild>
             <Button className="bg-blue-600 hover:bg-blue-700">
               <Plus className="w-4 h-4 mr-2" />
               New Share Invitation
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Share a Subscription</DialogTitle>
               <DialogDescription>Invite someone to split the cost of your subscription.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 mt-2">
+            <div className="space-y-5 mt-2">
+              {/* Subscription select */}
               <div className="space-y-2">
                 <Label>Select Subscription</Label>
                 <Select 
@@ -179,21 +203,112 @@ export default function SharedSubscriptions() {
                   </SelectTrigger>
                   <SelectContent>
                     {userSubscriptions.map(sub => (
-                      <SelectItem key={sub.id} value={sub.id}>{sub.name}</SelectItem>
+                      <SelectItem key={sub.id} value={sub.id.toString()}>
+                        {sub.name} — ₹{sub.amount}/mo
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Email */}
               <div className="space-y-2">
-                <Label htmlFor="email">Friend's Email</Label>
+                <Label htmlFor="invite-email">Friend's Email</Label>
                 <Input 
-                  id="email" 
+                  id="invite-email" 
                   type="email" 
                   placeholder="friend@example.com"
                   value={inviteForm.email}
                   onChange={e => setInviteForm({...inviteForm, email: e.target.value})}
                 />
               </div>
+
+              {/* Split Mode Toggle */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Split Mode</Label>
+                  <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+                    <button
+                      type="button"
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                        !inviteForm.useCustomPercent
+                          ? "bg-white text-blue-700 shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                      onClick={() => setInviteForm({...inviteForm, useCustomPercent: false, sharePercent: 50})}
+                    >
+                      Equal Split
+                    </button>
+                    <button
+                      type="button"
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                        inviteForm.useCustomPercent
+                          ? "bg-white text-blue-700 shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                      onClick={() => setInviteForm({...inviteForm, useCustomPercent: true})}
+                    >
+                      Custom %
+                    </button>
+                  </div>
+                </div>
+
+                {inviteForm.useCustomPercent && (
+                  <div className="space-y-4 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-600">Their share</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-2xl font-black text-blue-600">{inviteForm.sharePercent}</span>
+                        <Percent className="w-4 h-4 text-blue-400" />
+                      </div>
+                    </div>
+
+                    <Slider
+                      value={[inviteForm.sharePercent]}
+                      onValueChange={(vals) => setInviteForm({...inviteForm, sharePercent: vals[0]})}
+                      min={5}
+                      max={95}
+                      step={5}
+                      className="w-full"
+                    />
+
+                    <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <span>5%</span>
+                      <span>50%</span>
+                      <span>95%</span>
+                    </div>
+
+                    {/* Preview breakdown */}
+                    {selectedSubAmount > 0 && (
+                      <div className="grid grid-cols-2 gap-3 mt-2">
+                        <div className="p-3 bg-white rounded-lg border border-blue-100 text-center">
+                          <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Their Share</p>
+                          <p className="text-lg font-black text-blue-600">
+                            ₹{Math.round(selectedSubAmount * inviteForm.sharePercent / 100)}
+                          </p>
+                          <p className="text-[10px] text-slate-400">{inviteForm.sharePercent}% of ₹{selectedSubAmount}</p>
+                        </div>
+                        <div className="p-3 bg-white rounded-lg border border-green-100 text-center">
+                          <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Your Share</p>
+                          <p className="text-lg font-black text-green-600">
+                            ₹{Math.round(selectedSubAmount * (100 - inviteForm.sharePercent) / 100)}
+                          </p>
+                          <p className="text-[10px] text-slate-400">{100 - inviteForm.sharePercent}% of ₹{selectedSubAmount}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!inviteForm.useCustomPercent && selectedSubAmount > 0 && (
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 text-center">
+                    <p className="text-xs text-slate-500">
+                      Cost will be split equally — <span className="font-bold text-slate-700">₹{Math.round(selectedSubAmount / 2)}/person</span>
+                    </p>
+                  </div>
+                )}
+              </div>
+
               <Button 
                 className="w-full bg-blue-600 hover:bg-blue-700" 
                 onClick={handleInvite}
@@ -335,9 +450,14 @@ export default function SharedSubscriptions() {
                 <div className="text-right">
                   <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Your Monthly Contribution</p>
                   <p className="text-3xl font-black text-blue-600">₹{sub.your_share}</p>
-                  <Badge variant="secondary" className="bg-green-100 text-green-700 border-0 mt-2 font-bold px-3 py-1">
-                    Saving ₹{(sub.total_amount - sub.your_share)}/mo
-                  </Badge>
+                  <div className="flex items-center justify-end gap-2 mt-2">
+                    <Badge variant="secondary" className="bg-blue-50 text-blue-600 border-0 font-bold px-2 py-0.5 text-xs">
+                      {sub.your_percent}%
+                    </Badge>
+                    <Badge variant="secondary" className="bg-green-100 text-green-700 border-0 font-bold px-3 py-1">
+                      Saving ₹{(sub.total_amount - sub.your_share).toFixed(0)}/mo
+                    </Badge>
+                  </div>
                 </div>
               </div>
             </CardHeader>
@@ -351,7 +471,7 @@ export default function SharedSubscriptions() {
                   <div className="flex gap-2">
                     {sub.role === "Owner" && (
                       <Button size="sm" variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => {
-                        setInviteForm({...inviteForm, subscriptionId: sub.id});
+                        setInviteForm({...inviteForm, subscriptionId: sub.subscription_id.toString()});
                         setIsInviteDialogOpen(true);
                       }}>
                         <UserPlus className="w-4 h-4 mr-2" />
@@ -380,6 +500,10 @@ export default function SharedSubscriptions() {
                       </div>
                       <div className="text-right">
                         <p className="font-black text-slate-900 text-sm">₹{member.share_amount}</p>
+                        <Badge className="bg-blue-50 text-blue-600 border-0 text-[10px] px-1.5 h-4 flex items-center font-bold mt-1">
+                          <Percent className="w-2 h-2 mr-0.5" />
+                          {member.share_percent}%
+                        </Badge>
                         <div className="mt-1 flex items-center justify-end">
                           {member.status === "Accepted" ? (
                             <Badge className="bg-green-50 text-green-600 border-0 text-[10px] px-1.5 h-4 flex items-center font-bold">
@@ -443,9 +567,9 @@ export default function SharedSubscriptions() {
               <div className="w-10 h-10 rounded-xl bg-purple-500 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-purple-500/20">
                 2
               </div>
-              <h4 className="font-bold text-lg">Dynamic Splitting</h4>
+              <h4 className="font-bold text-lg">Custom Splitting</h4>
               <p className="text-sm text-slate-400 leading-relaxed">
-                Costs are dynamically recalculated as members join or leave. True cost-to-benefit transparency.
+                Choose equal splits or set custom percentages. Full control over how costs are distributed among members.
               </p>
             </div>
             <div className="space-y-3 p-4 rounded-2xl bg-white/5 border border-white/10">
