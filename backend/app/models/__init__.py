@@ -21,3 +21,4 @@ __all__ = [
     "SessionToken",
     "AlembicVersion",
 ]
+from .otp import OTP
