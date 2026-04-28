@@ -15,6 +15,7 @@ import {
   UserCog,
   Share2,
   ShoppingBag,
+  Package,
   LogOut
 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
@@ -45,24 +46,29 @@ export default function Root() {
     }
   }, [user]);
 
-  // Redirect if not logged in
+  // Redirect if not logged in or based on role
   useEffect(() => {
-    if (!authLoading && !user) {
-      navigate("/login");
+    if (!authLoading) {
+      if (!user) {
+        navigate("/login");
+      } else if (user.role === "enterprise" && location.pathname === "/") {
+        navigate("/enterprise");
+      }
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, location.pathname]);
 
   const userRole = user?.role || "user";
 
   const navigation = [
     { name: "Dashboard", path: "/", icon: LayoutDashboard, roles: ["user"] },
-    { name: "Products / Services", path: "/products", icon: ShoppingBag, roles: ["user"] },
-    { name: "Subscriptions", path: "/subscriptions", icon: CreditCard, roles: ["user"] },
-    { name: "Billing", path: "/billing", icon: CreditCard, roles: ["user"] },
+    { name: "Marketplace", path: "/products", icon: ShoppingBag, roles: ["user"] },
+    { name: "My Subscriptions", path: "/subscriptions", icon: CreditCard, roles: ["user"] },
+    { name: "Billing & Wallet", path: "/billing", icon: CreditCard, roles: ["user"] },
     { name: "Shared Subscriptions", path: "/shared", icon: Share2, roles: ["user"] },
     
     // Enterprise
     { name: "Dashboard", path: "/enterprise", icon: LayoutDashboard, roles: ["enterprise"] },
+    { name: "Services", path: "/enterprise/services", icon: Package, roles: ["enterprise"] },
     { name: "User Management", path: "/user-management", icon: Users, roles: ["enterprise"] },
     { name: "Analytics", path: "/analytics", icon: TrendingUp, roles: ["enterprise"] },
     

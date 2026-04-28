@@ -71,6 +71,13 @@ export default function SharedSubscriptions() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [feedback, setFeedback] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
+
+  const showFeedback = (msg: string, type: 'success' | 'error' = 'success') => {
+    setFeedback({ msg, type });
+    setTimeout(() => setFeedback(null), 4000);
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -105,9 +112,9 @@ export default function SharedSubscriptions() {
       setIsInviteDialogOpen(false);
       setInviteForm({ subscriptionId: "", email: "" });
       fetchData();
-      alert("Invitation sent successfully!");
+      showFeedback("Invitation sent successfully!");
     } catch (err: any) {
-      alert(err.message || "Failed to send invitation");
+      showFeedback(err.message || "Failed to send invitation", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -115,10 +122,11 @@ export default function SharedSubscriptions() {
 
   const handleInvitation = async (id: string, action: 'accept' | 'reject') => {
     try {
-      await api.post(`/api/shared/${id}/${action}`);
+      await api.post(`/api/shared/invitations/${id}/${action}`);
       fetchData();
+      showFeedback(`Invitation ${action}ed successfully`);
     } catch (err: any) {
-      alert(err.message || `Failed to ${action} invitation`);
+      showFeedback(err.message || `Failed to ${action} invitation`, "error");
     }
   };
 
@@ -127,8 +135,9 @@ export default function SharedSubscriptions() {
     try {
       await api.del(`/api/shared/${id}`);
       fetchData();
+      showFeedback("Successfully left the shared vault");
     } catch (err: any) {
-      alert(err.message || "Failed to leave shared subscription");
+      showFeedback(err.message || "Failed to leave shared subscription", "error");
     }
   };
 
@@ -155,6 +164,14 @@ export default function SharedSubscriptions() {
           <h1 className="text-2xl font-bold text-slate-900">Shared Subscriptions</h1>
           <p className="text-slate-600">View subscriptions split with friends and family</p>
         </div>
+        {feedback && (
+          <div className={`px-4 py-2 rounded-lg text-sm font-medium animate-in fade-in slide-in-from-top-2 flex items-center gap-2 ${
+            feedback.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+          }`}>
+            {feedback.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+            {feedback.msg}
+          </div>
+        )}
         <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-blue-600 hover:bg-blue-700">

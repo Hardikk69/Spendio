@@ -1,6 +1,6 @@
 from app.extensions import db
 from app.models.base_model import BaseModel
-from sqlalchemy import Column, Integer, String, Numeric, Boolean
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, ForeignKey
 
 class Service(db.Model, BaseModel):
     __tablename__ = 'service'
@@ -12,3 +12,5 @@ class Service(db.Model, BaseModel):
     base_price = Column(Numeric(10, 2))
     billing_cycle = Column(String(50))
     is_active = Column(Boolean)
+    description = Column(String(500))
+    owner_id = Column(Integer, ForeignKey('user.user_id'))

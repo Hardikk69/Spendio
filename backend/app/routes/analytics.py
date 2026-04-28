@@ -85,8 +85,10 @@ def spending_trend():
         # Sum payments in this month for this user
         total = db.session.query(func.coalesce(func.sum(Payment.amount_paid), 0)).join(
             Billing, Payment.billing_id == Billing.billing_id
+        ).join(
+            Subscription, Billing.subscription_id == Subscription.subscription_id
         ).filter(
-            Billing.user_id == user_id,
+            Subscription.user_id == user_id,
             Payment.status == "Success",
             extract("year", Payment.timestamp) == y,
             extract("month", Payment.timestamp) == m,
@@ -216,7 +218,7 @@ def top_subscriptions():
     ).join(
         Service, Subscription.service_id == Service.service_id
     ).filter(
-        Billing.user_id == user_id,
+        Subscription.user_id == user_id,
         Payment.status == "Success",
     ).group_by(Service.name).order_by(
         func.sum(Payment.amount_paid).desc()

@@ -5,8 +5,9 @@ import { Card, CardContent } from "../components/ui/card";
 import { useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { Checkbox } from "../components/ui/checkbox";
-import { CreditCard, Shield, TrendingUp, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, ArrowRight } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
+import { motion, AnimatePresence } from "motion/react";
 
 export default function Login() {
   const { login } = useAuth();
@@ -33,163 +34,145 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-purple-600 to-blue-800 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Animated Background Elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-20 left-20 w-72 h-72 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-400/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-400/10 rounded-full blur-3xl"></div>
+    <div className="min-h-screen bg-[#fafafa] flex items-center justify-center p-4 relative overflow-hidden font-inter">
+      {/* Subtle Background Decoration */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.4 }}
+          transition={{ duration: 2 }}
+          className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-blue-100 rounded-full blur-[120px]"
+        />
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.4 }}
+          transition={{ duration: 2, delay: 0.5 }}
+          className="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-purple-100 rounded-full blur-[120px]"
+        />
       </div>
 
-      <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-8 relative z-10">
-        {/* Left Side - Branding */}
-        <div className="hidden lg:flex flex-col justify-center text-white space-y-8 px-8">
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-2xl">
-                <span className="text-4xl font-bold bg-gradient-to-br from-blue-600 to-purple-600 bg-clip-text text-transparent">S</span>
-              </div>
-              <h1 className="text-5xl font-bold">Spendio</h1>
-            </div>
-            <p className="text-2xl font-light text-blue-100">
-              Manage all your subscriptions in one place
-            </p>
-          </div>
-
-          <div className="space-y-6 mt-12">
-            <div className="flex items-start gap-4 bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-purple-400 rounded-xl flex items-center justify-center flex-shrink-0">
-                <CreditCard className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-lg mb-1">Track Subscriptions</h3>
-                <p className="text-blue-100 text-sm">Never miss a payment with smart reminders and auto-pay management</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4 bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-              <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-pink-400 rounded-xl flex items-center justify-center flex-shrink-0">
-                <TrendingUp className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-lg mb-1">Analytics & Insights</h3>
-                <p className="text-blue-100 text-sm">Understand your spending patterns with detailed analytics</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4 bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-              <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-teal-400 rounded-xl flex items-center justify-center flex-shrink-0">
-                <Shield className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-lg mb-1">Secure & Private</h3>
-                <p className="text-blue-100 text-sm">Your data is encrypted and protected with industry-standard security</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-8 border-t border-white/20">
-            <p className="text-blue-100 text-sm">
-              Trusted by <span className="font-semibold text-white">10,000+</span> users worldwide
-            </p>
-          </div>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="w-full max-w-[440px] relative z-10"
+      >
+        <div className="text-center mb-10">
+          <motion.div 
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.2, duration: 0.5 }}
+            className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600 mb-6 shadow-xl shadow-blue-200"
+          >
+            <span className="text-white text-xl font-bold">S</span>
+          </motion.div>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight mb-2">Welcome back</h1>
+          <p className="text-slate-500 font-medium">Enter your details to access your account</p>
         </div>
 
-        {/* Right Side - Login Form */}
-        <div className="flex items-center justify-center">
-          <Card className="w-full max-w-md shadow-2xl border-0 bg-white/95 backdrop-blur-xl">
-            <CardContent className="p-8 md:p-10">
-              <div className="text-center mb-8">
-                <div className="lg:hidden mx-auto w-14 h-14 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center mb-4">
-                  <span className="text-white text-2xl font-bold">S</span>
-                </div>
-                <h2 className="text-3xl font-bold text-slate-900 mb-2">Welcome Back!</h2>
-                <p className="text-slate-600">Sign in to continue to Spendio</p>
+        <Card className="border-slate-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white/80 backdrop-blur-xl">
+          <CardContent className="p-8">
+            <AnimatePresence mode="wait">
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mb-6 p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg text-center font-medium"
+                >
+                  {error}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <form onSubmit={handleLogin} className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-slate-700 text-sm font-semibold">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="name@company.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="h-11 border-slate-200 bg-white/50 focus:bg-white transition-all duration-200 rounded-lg placeholder:text-slate-400"
+                />
               </div>
 
-              {error && (
-                <div className="mb-4 p-3 bg-red-100 border border-red-200 text-red-600 text-sm rounded-lg text-center">
-                  {error}
-                </div>
-              )}
-
-              <form onSubmit={handleLogin} className="space-y-5">
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-slate-700 font-medium">Email Address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="rajesh.kumar@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="h-12 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-slate-700 font-medium">Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      className="h-12 border-slate-300 focus:border-blue-500 focus:ring-blue-500 pr-12"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    >
-                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
-                  </div>
-                </div>
-
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="remember"
-                      checked={rememberMe}
-                      onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-                    />
-                    <Label
-                      htmlFor="remember"
-                      className="text-sm font-normal cursor-pointer text-slate-600"
-                    >
-                      Remember me
-                    </Label>
-                  </div>
-                  <Link to="/forgot-password" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                  <Label htmlFor="password" className="text-slate-700 text-sm font-semibold">Password</Label>
+                  <Link to="/forgot-password" size="sm" className="text-xs text-blue-600 hover:text-blue-700 font-semibold transition-colors">
                     Forgot password?
                   </Link>
                 </div>
-
-                <Button 
-                  type="submit" 
-                  disabled={isLoading}
-                  className="w-full h-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold text-base shadow-lg shadow-blue-500/30"
-                >
-                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
-                  Sign In
-                </Button>
-              </form>
-
-              <div className="mt-8 text-center border-t border-slate-100 pt-6">
-                <p className="text-slate-600 text-sm">
-                  Don't have an account?{" "}
-                  <Link to="/register" className="text-blue-600 hover:text-blue-700 font-semibold">
-                    Create Account
-                  </Link>
-                </p>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="h-11 border-slate-200 bg-white/50 focus:bg-white transition-all duration-200 rounded-lg pr-10 placeholder:text-slate-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
-            </CardContent>
-          </Card>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="remember"
+                  checked={rememberMe}
+                  onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                  className="border-slate-300 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                />
+                <Label
+                  htmlFor="remember"
+                  className="text-sm font-medium text-slate-500 cursor-pointer"
+                >
+                  Remember for 30 days
+                </Label>
+              </div>
+
+              <Button 
+                type="submit" 
+                disabled={isLoading}
+                className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-semibold transition-all duration-200 rounded-lg group"
+              >
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <>
+                    Sign in
+                    <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                  </>
+                )}
+              </Button>
+            </form>
+
+            <div className="mt-8 text-center">
+              <p className="text-slate-500 text-sm font-medium">
+                Don't have an account?{" "}
+                <Link to="/register" className="text-blue-600 hover:text-blue-700 font-bold transition-colors">
+                  Create account
+                </Link>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Footer info */}
+        <div className="mt-8 text-center text-slate-400 text-xs font-medium">
+          <p>© 2026 Spendio. Professional Subscription Management.</p>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

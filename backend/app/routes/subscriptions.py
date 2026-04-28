@@ -2,7 +2,8 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import date, datetime
 from app.extensions import db
-from app.models import Subscription, Service
+from app.models import Subscription, Service, SharedSubscription, Billing, Payment, User
+from app.services.notification_service import create_notification
 
 subs_bp = Blueprint("subscriptions", __name__)
 
@@ -48,7 +49,7 @@ def list_subscriptions():
         data = sub.to_dict()
         data.update(service.to_dict())
         data['id'] = sub.subscription_id
-        data['amount'] = float(service.base_price)
+        data['amount'] = float(service.base_price or 0)
         data['next_billing'] = sub.next_billing_date.strftime("%b %d, %Y") if sub.next_billing_date else "N/A"
         data['autopay'] = sub.auto_pay
         subscriptions_data.append(data)
@@ -71,7 +72,7 @@ def subscription_stats():
 
     monthly_total = 0
     for sub, service in active:
-        amount = float(service.base_price)
+        amount = float(service.base_price or 0)
         cycle = service.billing_cycle
         if cycle == "Monthly":
             monthly_total += amount
@@ -90,32 +91,51 @@ def subscription_stats():
     }), 200
 
 
+@subs_bp.route("/available-services", methods=["GET"])
+@jwt_required()
+def list_available_services():
+    user_id = get_jwt_identity()
+    
+    # Get IDs of services the user is already subscribed to
+    existing_subs = Subscription.query.filter_by(user_id=user_id).all()
+    subscribed_service_ids = [s.service_id for s in existing_subs]
+    
+    # List services created by enterprises that the user hasn't subscribed to yet
+    services = Service.query.filter(
+        Service.owner_id.isnot(None),
+        ~Service.service_id.in_(subscribed_service_ids) if subscribed_service_ids else True
+    ).all()
+    
+    return jsonify({"services": [s.to_dict() for s in services]}), 200
+
+
 @subs_bp.route("/", methods=["POST"])
 @jwt_required()
 def create_subscription():
     user_id = get_jwt_identity()
     data = request.get_json() or {}
 
-    # Handle payload variations from frontend
-    name = data.get("name") or data.get("provider_name")
-    amount = data.get("amount")
-    category = data.get("category")
+    service_id = data.get("service_id")
+    if not service_id:
+        return jsonify({"error": "service_id is required. Users can only subscribe to enterprise services."}), 400
+        
+    service = Service.query.get_or_404(service_id)
+    if not service.owner_id:
+        return jsonify({"error": "You can only subscribe to services provided by enterprises."}), 403
+
+    # Check user balance
+    user = User.get_by_id(db.session, user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+        
+    price = float(service.base_price or 0)
+    if user.money < price:
+        return jsonify({"error": f"Insufficient balance. Wallet balance: ₹{user.money}, Service price: ₹{price}"}), 402
+
+    # Deduct first payment
+    user.money -= int(price)
+    
     next_billing = data.get("next_billing") or data.get("next_billing_date")
-    provider = data.get("provider") or name
-
-    if not name or not amount or not category:
-        return jsonify({"error": "Missing name, amount, or category"}), 400
-
-    service = Service(
-        name=name.strip(),
-        category=category.strip(),
-        provider=provider.strip(),
-        base_price=float(amount),
-        billing_cycle=data.get("billing_cycle", "Monthly"),
-        is_active=True
-    )
-    db.session.add(service)
-    db.session.flush()
 
     sub = Subscription(
         user_id=user_id,
@@ -124,16 +144,41 @@ def create_subscription():
         next_billing_date=_parse_date(next_billing),
         status=data.get("status", "Active").capitalize(),
         auto_pay=bool(data.get("autopay", False)),
-        is_shared=False,
-        split_ratio=100.0
     )
     db.session.add(sub)
+    
+    # Create a record of the first payment
+    billing = Billing(
+        subscription_id=sub.subscription_id, # This will be populated after commit
+        amount_due=price,
+        billing_date=date.today(),
+        status="Paid"
+    )
+    db.session.add(billing)
+    db.session.flush() # To get the billing_id
+    
+    payment = Payment(
+        billing_id=billing.billing_id,
+        amount_paid=price,
+        timestamp=datetime.utcnow(),
+        status="Success"
+    )
+    db.session.add(payment)
+    
     db.session.commit()
+    
+    # Notify user of new subscription
+    create_notification(
+        user_id=user_id,
+        n_type="alert",
+        title="New Subscription Started",
+        message=f"You have successfully subscribed to {service.name}. Your first payment of \u20b9{price} has been processed."
+    )
     
     res = sub.to_dict()
     res.update(service.to_dict())
     res['id'] = sub.subscription_id
-    res['amount'] = float(service.base_price)
+    res['amount'] = float(service.base_price or 0)
     res['next_billing'] = sub.next_billing_date.strftime("%b %d, %Y") if sub.next_billing_date else "N/A"
     res['autopay'] = sub.auto_pay
     
@@ -152,7 +197,7 @@ def get_subscription(sub_id):
     data = sub.to_dict()
     data.update(service.to_dict())
     data['id'] = sub.subscription_id
-    data['amount'] = float(service.base_price)
+    data['amount'] = float(service.base_price or 0)
     data['next_billing'] = sub.next_billing_date.strftime("%b %d, %Y") if sub.next_billing_date else "N/A"
     data['autopay'] = sub.auto_pay
     
@@ -184,7 +229,7 @@ def update_subscription(sub_id):
     res = sub.to_dict()
     res.update(service.to_dict())
     res['id'] = sub.subscription_id
-    res['amount'] = float(service.base_price)
+    res['amount'] = float(service.base_price or 0)
     res['next_billing'] = sub.next_billing_date.strftime("%b %d, %Y") if sub.next_billing_date else "N/A"
     res['autopay'] = sub.auto_pay
     
@@ -205,6 +250,14 @@ def toggle_status(sub_id):
         return jsonify({"error": "Only Active/Paused subscriptions can be toggled"}), 400
 
     db.session.commit()
+    
+    create_notification(
+        user_id=user_id,
+        n_type="alert",
+        title="Subscription Updated",
+        message=f"Your subscription status has been changed to {sub.status}."
+    )
+    
     return jsonify({"message": f"Subscription is now {sub.status}"}), 200
 
 
@@ -215,6 +268,13 @@ def toggle_autopay(sub_id):
     sub = Subscription.query.filter_by(subscription_id=sub_id, user_id=user_id).first_or_404()
     sub.auto_pay = not sub.auto_pay
     db.session.commit()
+    
+    create_notification(
+        user_id=user_id,
+        n_type="reminder",
+        title="Auto-pay Updated",
+        message=f"Auto-pay has been {'enabled' if sub.auto_pay else 'disabled'} for your subscription."
+    )
     return jsonify({
         "message": f"Auto-pay {'enabled' if sub.auto_pay else 'disabled'}"
     }), 200
@@ -225,6 +285,8 @@ def toggle_autopay(sub_id):
 def delete_subscription(sub_id):
     user_id = get_jwt_identity()
     sub = Subscription.query.filter_by(subscription_id=sub_id, user_id=user_id).first_or_404()
+    
     db.session.delete(sub)
     db.session.commit()
-    return jsonify({"message": "Subscription deleted"}), 200
+    
+    return jsonify({"message": "Subscription deleted successfully"}), 200

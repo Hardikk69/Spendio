@@ -17,7 +17,6 @@ def create_app(config_name=None):
     cfg = config_map.get(config_name, config_map["default"])
     app.config.from_object(cfg)
 
-    # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
@@ -37,7 +36,7 @@ def create_app(config_name=None):
         )
 
     # Register blueprints
-    from app.routes import auth_bp, subs_bp, billing_bp, shared_bp, analytics_bp, settings_bp, admin_bp, notifications_bp
+    from app.routes import auth_bp, subs_bp, billing_bp, shared_bp, analytics_bp, settings_bp, admin_bp, notifications_bp, enterprise_bp, simulation_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(subs_bp, url_prefix="/api/subscriptions")
@@ -47,6 +46,8 @@ def create_app(config_name=None):
     app.register_blueprint(settings_bp, url_prefix="/api/settings")
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
     app.register_blueprint(notifications_bp, url_prefix="/api/notifications")
+    app.register_blueprint(enterprise_bp, url_prefix="/api/enterprise")
+    app.register_blueprint(simulation_bp, url_prefix="/api/simulation")
 
     # Health check
     @app.route("/api/health")
@@ -66,3 +67,5 @@ def create_app(config_name=None):
     register_commands(app)
 
     return app
+
+

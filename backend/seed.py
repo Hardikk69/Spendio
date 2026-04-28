@@ -14,7 +14,7 @@ from app.extensions import db
 from app.models import (
     User, Subscription, Transaction,
     SharedSubscription, SharedSubscriptionMember, Invitation,
-    NotificationSettings, PaymentSettings,
+    Notification, Payment,
 )
 
 
@@ -62,8 +62,8 @@ def seed():
 
         # Default settings for each user
         for u in [admin_user, rajesh, sarah]:
-            db.session.add(NotificationSettings(user_id=u.id))
-            db.session.add(PaymentSettings(user_id=u.id))
+            db.session.add(Notification(user_id=u.id))
+            db.session.add(Payment(user_id=u.id))
 
         # ── Subscriptions ──────────────────────────────────────────────────
         today = date.today()

@@ -7,7 +7,6 @@ class Billing(db.Model, BaseModel):
 
     billing_id = Column(Integer, primary_key=True)
     subscription_id = Column(Integer, ForeignKey('subscription.subscription_id'))
-    user_id = Column(Integer, ForeignKey('user.user_id'))
     amount_due = Column(Numeric(10, 2))
     billing_date = Column(Date)
     status = Column(String(50))

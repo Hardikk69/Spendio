@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.extensions import db
 from app.models import Notification
+from app.services.notification_service import check_upcoming_payments
 
 notifications_bp = Blueprint("notifications", __name__)
 
@@ -9,6 +10,10 @@ notifications_bp = Blueprint("notifications", __name__)
 @jwt_required()
 def get_notifications():
     user_id = get_jwt_identity()
+    
+    # Check for upcoming payments (7-day reminder)
+    check_upcoming_payments(user_id)
+    
     notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.sent_at.desc()).all()
     
     # Format the notifications for the frontend

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
-import { MoreVertical, Check, Loader2, AlertCircle } from "lucide-react";
+import { MoreVertical, Check, Loader2, AlertCircle, ShoppingBag } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,97 +28,11 @@ import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { api } from "../../lib/api";
 import { useNavigate } from "react-router";
 
-const servicesData = {
-  Entertainment: [
-    {
-      name: "Netflix",
-      logo: "🎬",
-      description: "Watch unlimited movies, TV shows, and more",
-      pricing: { monthly: 649, yearly: 7788 },
-      color: "from-red-500 to-red-600"
-    },
-    {
-      name: "Amazon Prime Video",
-      logo: "📺",
-      description: "Unlimited streaming of movies and TV shows",
-      pricing: { monthly: 179, yearly: 1499 },
-      color: "from-blue-400 to-blue-600"
-    },
-    {
-      name: "Disney+ Hotstar",
-      logo: "✨",
-      description: "Watch your favorite Disney, Marvel, Star Wars content",
-      pricing: { monthly: 299, yearly: 1499 },
-      color: "from-blue-600 to-purple-600"
-    },
-  ],
-  Music: [
-    {
-      name: "Spotify",
-      logo: "🎵",
-      description: "Listen to millions of songs and podcasts",
-      pricing: { monthly: 119, yearly: 1189 },
-      color: "from-green-500 to-green-600"
-    },
-    {
-      name: "Apple Music",
-      logo: "🎼",
-      description: "Stream over 100 million songs ad-free",
-      pricing: { monthly: 99, yearly: 999 },
-      color: "from-pink-500 to-red-500"
-    },
-    {
-      name: "YouTube Music",
-      logo: "🎶",
-      description: "Official songs, albums, music videos, and more",
-      pricing: { monthly: 99, yearly: 1190 },
-      color: "from-red-500 to-orange-500"
-    },
-  ],
-  "Developer Tools": [
-    {
-      name: "GitHub",
-      logo: "💻",
-      description: "Code hosting platform for version control",
-      pricing: { monthly: 329, yearly: 3300 },
-      color: "from-gray-700 to-gray-900"
-    },
-    {
-      name: "AWS",
-      logo: "☁️",
-      description: "Amazon Web Services cloud computing platform",
-      pricing: { monthly: 2500, yearly: 27000 },
-      color: "from-orange-500 to-orange-600"
-    },
-    {
-      name: "JetBrains",
-      logo: "🔧",
-      description: "Professional developer tools and IDEs",
-      pricing: { monthly: 899, yearly: 8990 },
-      color: "from-purple-500 to-purple-700"
-    },
-  ],
-  "AI / GPT": [
-    {
-      name: "ChatGPT Plus",
-      logo: "🤖",
-      description: "Advanced AI language model with GPT-4 access",
-      pricing: { monthly: 1650, yearly: 19800 },
-      color: "from-emerald-500 to-teal-600"
-    },
-    {
-      name: "GitHub Copilot",
-      logo: "🧠",
-      description: "AI pair programmer that helps you write code",
-      pricing: { monthly: 829, yearly: 8290 },
-      color: "from-indigo-500 to-purple-600"
-    },
-  ],
-};
-
 export default function ProductsServices() {
   const navigate = useNavigate();
-  const [selectedCategory, setSelectedCategory] = useState<string>("Entertainment");
+  const [services, setServices] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState<string>("All Categories");
   const [selectedService, setSelectedService] = useState<any>(null);
   const [duration, setDuration] = useState<"monthly" | "yearly">("monthly");
   const [paymentType, setPaymentType] = useState<"solo" | "shared">("solo");
@@ -126,20 +40,34 @@ export default function ProductsServices() {
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const categories = Object.keys(servicesData);
-  const services = servicesData[selectedCategory as keyof typeof servicesData] || [];
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        setIsLoading(true);
+        const res = await api.get<{ services: any[] }>("/api/subscriptions/available-services");
+        setServices(res.services);
+      } catch (err: any) {
+        setError(err.message || "Failed to load services");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchServices();
+  }, []);
 
   const handleOpenDialog = (service: any) => {
     setSelectedService(service);
     setIsDialogOpen(true);
     setError(null);
+    setDuration("monthly");
   };
 
   const calculateTotal = () => {
     if (!selectedService) return 0;
-    const basePrice = selectedService.pricing[duration];
-    const tax = basePrice * 0.18; // 18% GST
-    return basePrice + tax;
+    const basePrice = Number(selectedService.base_price || 0);
+    const amount = duration === "monthly" ? basePrice : basePrice * 10;
+    const tax = amount * 0.18;
+    return amount + tax;
   };
 
   const processSubscription = async () => {
@@ -148,24 +76,12 @@ export default function ProductsServices() {
       setIsSubscribing(true);
       setError(null);
 
-      // Map frontend category names to backend category values
-      const categoryMap: Record<string, string> = {
-        "Entertainment": "OTT",
-        "Music": "Music",
-        "Developer Tools": "SaaS",
-        "AI / GPT": "SaaS",
-      };
-
-      const billingCycle = duration === "monthly" ? "Monthly" : "Yearly";
       const nextBillingDate = new Date(
         Date.now() + (duration === "monthly" ? 30 : 365) * 24 * 60 * 60 * 1000
       ).toISOString().split("T")[0];
 
       const payload = {
-        name: selectedService.name,
-        category: categoryMap[selectedCategory] || "Other",
-        amount: selectedService.pricing[duration],
-        billing_cycle: billingCycle,
+        service_id: selectedService.service_id,
         status: "Active",
         next_billing: nextBillingDate,
         autopay: false,
@@ -181,27 +97,55 @@ export default function ProductsServices() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="h-96 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  const categories = ["All Categories", ...Array.from(new Set(services.map(s => s.category || "Other")))];
+  const filteredServices = selectedCategory === "All Categories" 
+    ? services 
+    : services.filter(s => (s.category || "Other") === selectedCategory);
+
+  const getGradient = (name: string) => {
+    const gradients = [
+      "from-blue-500 to-blue-600",
+      "from-purple-500 to-purple-600",
+      "from-emerald-500 to-emerald-600",
+      "from-orange-500 to-orange-600",
+      "from-pink-500 to-pink-600",
+      "from-indigo-500 to-indigo-600",
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    return gradients[Math.abs(hash) % gradients.length];
+  };
+
   return (
     <div className="space-y-6 max-w-7xl">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Products & Services</h1>
-          <p className="text-slate-600">Discover and subscribe to services across different categories</p>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <ShoppingBag className="w-7 h-7 text-blue-600" />
+            Marketplace
+          </h1>
+          <p className="text-slate-600">Discover and subscribe to services provided by our enterprise partners</p>
         </div>
       </div>
 
-      {/* Category Selector */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
+      <Card className="border-none shadow-sm bg-slate-50/50">
+        <CardHeader className="pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <CardTitle>Browse Categories</CardTitle>
-              <CardDescription>Select a category to view available services</CardDescription>
+              <CardTitle className="text-lg">Filter by Category</CardTitle>
+              <CardDescription>Browse through available service categories</CardDescription>
             </div>
             <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-64">
-                <SelectValue />
+              <SelectTrigger className="w-full sm:w-64 bg-white">
+                <SelectValue placeholder="Select Category" />
               </SelectTrigger>
               <SelectContent>
                 {categories.map((category) => (
@@ -215,159 +159,124 @@ export default function ProductsServices() {
         </CardHeader>
       </Card>
 
-      {/* Services Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {services.map((service, idx) => (
-          <Card key={idx} className="hover:shadow-lg transition-all duration-300 border-slate-200">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${service.color} flex items-center justify-center text-3xl shadow-lg`}>
-                  {service.logo}
+      {filteredServices.length === 0 ? (
+        <div className="h-64 flex flex-col items-center justify-center text-slate-500 border-2 border-dashed rounded-xl">
+          <ShoppingBag className="w-12 h-12 mb-2 opacity-20" />
+          <p>No services available in this category yet.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredServices.map((service) => (
+            <Card key={service.service_id} className="hover:shadow-md transition-all duration-300 border-slate-200 overflow-hidden group">
+              <div className={`h-2 bg-gradient-to-r ${getGradient(service.name)}`} />
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${getGradient(service.name)} flex items-center justify-center text-2xl text-white shadow-sm`}>
+                    {service.name.charAt(0)}
+                  </div>
+                  <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-none">
+                    {service.category || "Other"}
+                  </Badge>
                 </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                      <MoreVertical className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleOpenDialog(service)}>
-                      Subscribe Now
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>View Details</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              <div className="pt-2">
-                <CardTitle className="text-lg">{service.name}</CardTitle>
-                <CardDescription className="text-sm mt-1">{service.description}</CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold text-slate-900">₹{service.pricing.monthly}</span>
-                <span className="text-sm text-slate-500">/month</span>
-              </div>
-              <div className="flex gap-2">
-                <Badge variant="outline" className="text-xs">Monthly: ₹{service.pricing.monthly}</Badge>
-                <Badge variant="outline" className="text-xs">Yearly: ₹{service.pricing.yearly}</Badge>
-              </div>
-              <Button 
-                className="w-full mt-2" 
-                onClick={() => handleOpenDialog(service)}
-              >
-                Subscribe Now
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                <div className="pt-4">
+                  <CardTitle className="text-lg group-hover:text-blue-600 transition-colors">{service.name}</CardTitle>
+                  <CardDescription className="text-sm line-clamp-2 mt-1">
+                    {service.description || `Premium subscription service by ${service.provider || 'Enterprise'}`}
+                  </CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-slate-900">₹{service.base_price}</span>
+                  <span className="text-sm text-slate-500">/mo</span>
+                </div>
+                <Button 
+                  className="w-full bg-slate-900 hover:bg-blue-600 text-white transition-colors" 
+                  onClick={() => handleOpenDialog(service)}
+                >
+                  Subscribe Now
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
-      {/* Subscription Modal */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Subscribe to {selectedService?.name}</DialogTitle>
-            <DialogDescription>Configure your subscription details</DialogDescription>
+            <DialogDescription>Configure your enterprise subscription</DialogDescription>
           </DialogHeader>
 
           {selectedService && (
             <div className="space-y-6 pt-4">
               {error && (
-                <div className="p-3 bg-red-100 border border-red-200 text-red-600 text-sm rounded-lg flex items-center gap-2">
+                <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" />
                   {error}
                 </div>
               )}
 
-              {/* Service Info */}
-              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${selectedService.color} flex items-center justify-center text-2xl`}>
-                  {selectedService.logo}
+              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${getGradient(selectedService.name)} flex items-center justify-center text-xl text-white`}>
+                  {selectedService.name.charAt(0)}
                 </div>
                 <div>
                   <h3 className="font-semibold text-slate-900">{selectedService.name}</h3>
-                  <p className="text-sm text-slate-600">{selectedService.description}</p>
+                  <p className="text-xs text-slate-500 line-clamp-1">{selectedService.description || 'Enterprise Service'}</p>
                 </div>
               </div>
 
-              {/* Duration Selection */}
               <div className="space-y-3">
-                <Label className="text-sm font-semibold">Billing Cycle</Label>
+                <Label className="text-sm font-semibold">Billing Plan</Label>
                 <RadioGroup value={duration} onValueChange={(val) => setDuration(val as any)}>
-                  <div className="flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
-                    <div className="flex items-center space-x-2">
+                  <div className="flex items-center justify-between p-3 border rounded-xl cursor-pointer hover:border-blue-200 hover:bg-blue-50/30 transition-all">
+                    <div className="flex items-center space-x-3">
                       <RadioGroupItem value="monthly" id="monthly" />
-                      <Label htmlFor="monthly" className="cursor-pointer">Monthly</Label>
+                      <Label htmlFor="monthly" className="cursor-pointer font-medium">Monthly Plan</Label>
                     </div>
-                    <span className="font-semibold">₹{selectedService.pricing.monthly}</span>
+                    <span className="font-bold text-slate-900">₹{selectedService.base_price}</span>
                   </div>
-                  <div className="flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
-                    <div className="flex items-center space-x-2">
+                  <div className="flex items-center justify-between p-3 border rounded-xl cursor-pointer hover:border-blue-200 hover:bg-blue-50/30 transition-all">
+                    <div className="flex items-center space-x-3">
                       <RadioGroupItem value="yearly" id="yearly" />
-                      <Label htmlFor="yearly" className="cursor-pointer">Yearly</Label>
+                      <Label htmlFor="yearly" className="cursor-pointer font-medium">Yearly Plan</Label>
                     </div>
                     <div className="text-right">
-                      <span className="font-semibold">₹{selectedService.pricing.yearly}</span>
-                      <Badge className="ml-2 bg-green-100 text-green-700 text-xs">Save 10%</Badge>
+                      <span className="font-bold text-slate-900">₹{Number(selectedService.base_price) * 10}</span>
+                      <Badge className="ml-2 bg-green-100 text-green-700 hover:bg-green-100 border-none">Save 16%</Badge>
                     </div>
                   </div>
                 </RadioGroup>
               </div>
 
-              {/* Payment Type */}
-              <div className="space-y-3">
-                <Label className="text-sm font-semibold">Payment Type</Label>
-                <RadioGroup value={paymentType} onValueChange={(val) => setPaymentType(val as any)}>
-                  <div className="flex items-center space-x-2 p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
-                    <RadioGroupItem value="solo" id="solo" />
-                    <Label htmlFor="solo" className="cursor-pointer flex-1">
-                      <div>
-                        <p className="font-medium">Solo Payment</p>
-                        <p className="text-xs text-slate-500">You pay the full amount</p>
-                      </div>
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2 p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
-                    <RadioGroupItem value="shared" id="shared" />
-                    <Label htmlFor="shared" className="cursor-pointer flex-1">
-                      <div>
-                        <p className="font-medium">Shared Payment</p>
-                        <p className="text-xs text-slate-500">Split the cost with others</p>
-                      </div>
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              {/* Price Breakdown */}
-              <div className="space-y-2 p-4 bg-slate-50 rounded-lg">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">Base Price</span>
-                  <span className="font-semibold">₹{selectedService.pricing[duration]}</span>
+              <div className="space-y-2 p-4 bg-slate-900 text-white rounded-xl shadow-inner">
+                <div className="flex justify-between text-sm opacity-80">
+                  <span>Subtotal</span>
+                  <span>₹{duration === "monthly" ? selectedService.base_price : Number(selectedService.base_price) * 10}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">GST (18%)</span>
-                  <span className="font-semibold">₹{(selectedService.pricing[duration] * 0.18).toFixed(2)}</span>
+                <div className="flex justify-between text-sm opacity-80">
+                  <span>Tax (GST 18%)</span>
+                  <span>₹{((duration === "monthly" ? selectedService.base_price : Number(selectedService.base_price) * 10) * 0.18).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-base font-bold pt-2 border-t border-slate-200">
-                  <span>Total Payable</span>
-                  <span className="text-blue-600">₹{calculateTotal().toFixed(2)}</span>
+                <div className="flex justify-between text-lg font-bold pt-2 mt-2 border-t border-white/10">
+                  <span>Total Due</span>
+                  <span className="text-blue-400">₹{calculateTotal().toFixed(2)}</span>
                 </div>
               </div>
 
-              {/* Action Buttons */}
               <div className="flex gap-3">
-                <Button variant="outline" className="flex-1" onClick={() => setIsDialogOpen(false)} disabled={isSubscribing}>
-                  Cancel
+                <Button variant="ghost" className="flex-1" onClick={() => setIsDialogOpen(false)} disabled={isSubscribing}>
+                  Back
                 </Button>
                 <Button 
-                  className="flex-1 bg-blue-600 hover:bg-blue-700" 
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200" 
                   onClick={processSubscription}
                   disabled={isSubscribing}
                 >
                   {isSubscribing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
-                  Start Subscription
+                  Confirm & Start
                 </Button>
               </div>
             </div>

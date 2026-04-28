@@ -12,7 +12,8 @@ import {
   Save,
   Loader2,
   AlertCircle,
-  Key
+  Key,
+  Activity
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { useEffect, useState } from "react";
@@ -373,6 +374,123 @@ export default function Settings() {
           </Button>
         </CardContent>
       </Card>
+      {/* Simulation Engine */}
+      <Card className="border-orange-200 bg-orange-50/10">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-orange-700">
+            <Activity className="w-5 h-5" />
+            Simulation Engine (High-Speed Mode)
+          </CardTitle>
+          <CardDescription>Accelerate time to test billing cycles (1 real second = 1 simulated day)</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <SimulationEngine />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function SimulationEngine() {
+  const [status, setStatus] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchStatus = async () => {
+    try {
+      const data = await api.get<any>("/api/simulation/status");
+      setStatus(data);
+    } catch (err) {}
+  };
+
+  useEffect(() => {
+    fetchStatus();
+  }, []);
+
+  // Tick logic: 1s = 1day
+  useEffect(() => {
+    let interval: any;
+    if (status?.is_active) {
+      interval = setInterval(async () => {
+        try {
+          const data = await api.post<any>("/api/simulation/tick");
+          setStatus((prev: any) => ({
+            ...prev,
+            current_date: data.current_date,
+            logs: [...(prev.logs || []), ...(data.logs || [])].slice(-20)
+          }));
+        } catch (err) {
+          console.error("Tick failed", err);
+        }
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [status?.is_active]);
+
+  const toggleSimulation = async () => {
+    setLoading(true);
+    try {
+      const res = await api.post<any>("/api/simulation/toggle", { active: !status?.is_active });
+      setStatus({ ...status, is_active: res.is_active });
+    } catch (err) {
+      alert("Failed to toggle simulation");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetSimulation = async () => {
+    if (!confirm("Reset simulated date to today?")) return;
+    try {
+      await api.post("/api/simulation/reset");
+      fetchStatus();
+    } catch (err) {}
+  };
+
+  const simTopup = async () => {
+    try {
+      await api.post("/api/simulation/topup");
+      fetchStatus();
+    } catch (err) {}
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-orange-100 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className={`w-3 h-3 rounded-full ${status?.is_active ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`} />
+          <div>
+            <p className="font-bold text-slate-900">Engine Status: {status?.is_active ? "RUNNING" : "PAUSED"}</p>
+            <p className="text-xs text-slate-500">Current Sim Date: <span className="font-mono text-orange-600">{status?.current_date || "Loading..."}</span></p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={simTopup}>Sim Top-up</Button>
+          <Button size="sm" variant="outline" onClick={resetSimulation}>Reset</Button>
+          <Button 
+            size="sm" 
+            className={status?.is_active ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"}
+            onClick={toggleSimulation}
+            disabled={loading}
+          >
+            {status?.is_active ? "Stop Engine" : "Start Engine"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="bg-slate-900 rounded-lg p-3 font-mono text-[10px] text-slate-300 h-40 overflow-y-auto">
+        <p className="text-slate-500 mb-2">// Simulation Logs (Auto-refreshing)</p>
+        {status?.logs?.length === 0 && <p className="text-slate-600">No logs yet. Start the engine to see activity.</p>}
+        {status?.logs?.map((log: string, i: number) => (
+          <div key={i} className="mb-1">
+            <span className="text-blue-400">{log.substring(0, 22)}</span>
+            <span className="ml-2">{log.substring(22)}</span>
+          </div>
+        ))}
+      </div>
+      
+      <p className="text-[11px] text-slate-500 italic">
+        * Note: Every 30 seconds (simulated month), active subscriptions will auto-deduct from your wallet balance.
+      </p>
     </div>
   );
 }

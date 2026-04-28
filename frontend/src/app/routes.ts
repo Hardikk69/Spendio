@@ -13,11 +13,18 @@ const Settings = lazy(() => import("./pages/Settings"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const ProductsServices = lazy(() => import("./pages/ProductsServices"));
+const EnterpriseServices = lazy(() => import("./pages/EnterpriseServices"));
+
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 
 export const router = createBrowserRouter([
   {
     path: "/login",
     Component: Login,
+  },
+  {
+    path: "/forgot-password",
+    Component: ForgotPassword,
   },
   {
     path: "/register",
@@ -29,6 +36,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, Component: Dashboard },
       { path: "enterprise", Component: EnterpriseDashboard },
+      { path: "enterprise/services", Component: EnterpriseServices },
       { path: "products", Component: ProductsServices },
       { path: "subscriptions", Component: Subscriptions },
       { path: "billing", Component: Billing },

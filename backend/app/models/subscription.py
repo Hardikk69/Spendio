@@ -13,4 +13,3 @@ class Subscription(db.Model, BaseModel):
     next_billing_date = Column(Date)
     auto_pay = Column(Boolean)
     is_shared = Column(Boolean)
-    split_ratio = Column(Numeric(5, 2))

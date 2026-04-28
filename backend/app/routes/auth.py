@@ -8,6 +8,8 @@ from flask_jwt_extended import (
 )
 from app.extensions import db
 from app.models import User, Notification, Payment
+import random
+from app.services.sms_service import send_sms
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -38,6 +40,7 @@ def register():
     user = User(
         name=full_name,
         email=email,
+        phone=data.get("phone"), # Allow setting phone during register
         role=data.get("role", "user"),
     )
     user.set_password(password)
@@ -138,3 +141,55 @@ def change_password():
     user.set_password(data["new_password"])
     db.session.commit()
     return jsonify({"message": "Password updated successfully"}), 200
+
+
+@auth_bp.route("/forgot-password-sms", methods=["POST"])
+def forgot_password_sms():
+    data = request.get_json() or {}
+    phone = data.get("phone")
+    if not phone:
+        return jsonify({"error": "Phone number is required"}), 400
+
+    user = User.query.filter_by(phone=phone).first()
+    if not user:
+        # For security, don't reveal if user exists, but we are in dev/simulation mode
+        return jsonify({"error": "No user found with this phone number"}), 404
+
+    # Generate 6-digit OTP
+    otp = str(random.randint(100000, 999999))
+    user.reset_code = otp
+    db.session.commit()
+
+    message = f"Your Spendio password reset code is: {otp}. Valid for 10 minutes."
+    success = send_sms(phone, message)
+    
+    if success:
+        return jsonify({"message": "Reset code sent successfully"}), 200
+    else:
+        return jsonify({"error": "Failed to send SMS. Please try again later."}), 500
+
+
+@auth_bp.route("/reset-password-sms", methods=["POST"])
+def reset_password_sms():
+    data = request.get_json() or {}
+    phone = data.get("phone")
+    code = data.get("code")
+    new_password = data.get("new_password")
+
+    if not all([phone, code, new_password]):
+        return jsonify({"error": "phone, code, and new_password are required"}), 400
+
+    user = User.query.filter_by(phone=phone, reset_code=code).first()
+    if not user:
+        return jsonify({"error": "Invalid reset code or phone number"}), 401
+
+    if len(new_password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+
+    user.set_password(new_password)
+    user.reset_code = None # Clear code after use
+    db.session.commit()
+    
+    print(f"DEBUG: Password reset successful for user: {user.email} (Phone: {phone})")
+
+    return jsonify({"message": "Password reset successful"}), 200
