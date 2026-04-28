@@ -1,8 +1,8 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { Badge } from "../components/ui/badge";
-import { Avatar, AvatarFallback } from "../components/ui/avatar";
-import { Slider } from "../components/ui/slider";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { Badge } from "../components/ui/Badge";
+import { Avatar, AvatarFallback } from "../components/ui/Avatar";
+import { Slider } from "../components/ui/Slider";
 import { 
   Users, 
   Plus, 
@@ -18,10 +18,10 @@ import {
   X,
   Percent
 } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/Dialog";
+import { Input } from "../components/ui/Input";
+import { Label } from "../components/ui/Label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 
@@ -595,3 +595,4 @@ export default function SharedSubscriptions() {
     </div>
   );
 }
+

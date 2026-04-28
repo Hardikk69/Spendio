@@ -1,8 +1,8 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
-import { Switch } from "../components/ui/switch";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { Input } from "../components/ui/Input";
+import { Label } from "../components/ui/Label";
+import { Switch } from "../components/ui/Switch";
 import { 
   User as UserIcon, 
   CreditCard, 
@@ -15,11 +15,11 @@ import {
   Key,
   Activity
 } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
 import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router";
 import { api } from "../../lib/api";
-import { useAuth } from "../../hooks/useauth";
+import { useAuth } from "../../hooks/useAuth";
 
 export default function Settings() {
   const { user, isLoading: authLoading } = useAuth();
@@ -494,3 +494,5 @@ function SimulationEngine() {
     </div>
   );
 }
+
+

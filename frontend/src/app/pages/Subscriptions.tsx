@@ -1,8 +1,8 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { Badge } from "../components/ui/badge";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { Badge } from "../components/ui/Badge";
+import { Input } from "../components/ui/Input";
+import { Label } from "../components/ui/Label";
 import { 
   Plus, 
   Search, 
@@ -20,10 +20,10 @@ import {
   AlertCircle
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Switch } from "../components/ui/switch";
-import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/Dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
+import { Switch } from "../components/ui/Switch";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/Popover";
 import { api } from "../../lib/api";
 
 interface Subscription {
@@ -509,3 +509,4 @@ export default function Subscriptions() {
     </div>
   );
 }
+

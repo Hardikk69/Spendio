@@ -1,30 +1,30 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { Badge } from "../components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { Badge } from "../components/ui/Badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../components/ui/select";
+} from "../components/ui/Select";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "../components/ui/dialog";
+} from "../components/ui/Dialog";
 import { MoreVertical, Check, Loader2, AlertCircle, ShoppingBag } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "../components/ui/dropdown-menu";
-import { Label } from "../components/ui/label";
-import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
+} from "../components/ui/DropdownMenu";
+import { Label } from "../components/ui/Label";
+import { RadioGroup, RadioGroupItem } from "../components/ui/RadioGroup";
 import { api } from "../../lib/api";
 import { useNavigate } from "react-router";
 
@@ -286,3 +286,5 @@ export default function ProductsServices() {
     </div>
   );
 }
+
+

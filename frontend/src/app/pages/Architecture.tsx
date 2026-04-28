@@ -1,5 +1,5 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/Card";
+import { Badge } from "../components/ui/Badge";
 import { Layers, Server, Database, Globe, Code, Shield } from "lucide-react";
 
 export default function Architecture() {
@@ -310,3 +310,5 @@ export default function Architecture() {
     </div>
   );
 }
+
+

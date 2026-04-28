@@ -1,13 +1,13 @@
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
-import { Card, CardContent } from "../components/ui/card";
+import { Button } from "../components/ui/Button";
+import { Input } from "../components/ui/Input";
+import { Label } from "../components/ui/Label";
+import { Card, CardContent } from "../components/ui/Card";
 import { useState } from "react";
 import { useNavigate, Link } from "react-router";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Checkbox } from "../components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
+import { Checkbox } from "../components/ui/Checkbox";
 import { User, Mail, Phone, Lock, Eye, EyeOff, CheckCircle2, Loader2, ArrowRight } from "lucide-react";
-import { useAuth } from "../../hooks/useauth";
+import { useAuth } from "../../hooks/useAuth";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function Register() {
@@ -297,3 +297,5 @@ export default function Register() {
     </div>
   );
 }
+
+

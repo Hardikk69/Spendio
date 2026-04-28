@@ -9,3 +9,9 @@ __pycache__/
 # Optional but recommended
 venv/
 .env.*
+dist/
+.vite/
+frontend/dist/
+frontend/.vite/
+frontend/.env
+backend/.env

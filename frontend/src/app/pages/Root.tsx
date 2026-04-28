@@ -18,12 +18,12 @@ import {
   Package,
   LogOut
 } from "lucide-react";
-import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
-import { Avatar, AvatarFallback } from "../components/ui/avatar";
+import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
+import { Avatar, AvatarFallback } from "../components/ui/Avatar";
 import { useState, useEffect } from "react";
-import NotificationsPanel from "../components/notificationspanel";
-import { useAuth } from "../../hooks/useauth";
+import NotificationsPanel from "../components/NotificationsPanel";
+import { useAuth } from "../../hooks/useAuth";
 import { api } from "../../lib/api";
 
 export default function Root() {
@@ -237,3 +237,4 @@ export default function Root() {
     </div>
   );
 }
+

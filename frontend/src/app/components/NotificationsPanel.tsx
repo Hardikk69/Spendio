@@ -1,8 +1,8 @@
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card";
+import { Button } from "./ui/Button";
+import { Badge } from "./ui/Badge";
 import { X, Bell, CheckCircle2, AlertCircle, Clock, DollarSign, Share2, AlertTriangle } from "lucide-react";
-import { ScrollArea } from "./ui/scroll-area";
+import { ScrollArea } from "./ui/ScrollArea";
 import { useState, useEffect } from "react";
 import { api } from "../../lib/api";
 
@@ -167,3 +167,4 @@ export default function NotificationsPanel({ isOpen, onClose }: NotificationsPan
     </div>
   );
 }
+

@@ -1,6 +1,6 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { Badge } from "../components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { Badge } from "../components/ui/Badge";
 import {
   Download,
   CheckCircle2,
@@ -18,10 +18,10 @@ import {
   X,
   RefreshCw,
 } from "lucide-react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
 import { api } from "../../lib/api";
-import { useAuth } from "../../hooks/useauth";
+import { useAuth } from "../../hooks/useAuth";
 import { useEffect, useState } from "react";
 
 declare global {
@@ -599,3 +599,4 @@ export default function Billing() {
     </div>
   );
 }
+

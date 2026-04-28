@@ -1,6 +1,6 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Badge } from "../components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/Card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/Tabs";
+import { Badge } from "../components/ui/Badge";
 import { 
   Zap, 
   Shield, 
@@ -318,3 +318,5 @@ function TrendingUp(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+

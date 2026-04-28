@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Button } from "../components/ui/Button";
+import { Input } from "../components/ui/Input";
+import { Label } from "../components/ui/Label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/Card";
 import { api } from "../../lib/api";
 import { Loader2, Phone, Key, ShieldCheck, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
 
@@ -229,3 +229,5 @@ export default function ForgotPassword() {
     </div>
   );
 }
+
+

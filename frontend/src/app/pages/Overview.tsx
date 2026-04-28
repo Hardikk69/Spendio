@@ -1,5 +1,5 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/Card";
+import { Badge } from "../components/ui/Badge";
 import { 
   Users, 
   Building2, 
@@ -10,7 +10,7 @@ import {
   Clock,
   Target
 } from "lucide-react";
-import { Progress } from "../components/ui/progress";
+import { Progress } from "../components/ui/Progress";
 
 export default function Overview() {
   const keyMetrics = [
@@ -234,3 +234,5 @@ export default function Overview() {
     </div>
   );
 }
+
+
