@@ -7,7 +7,7 @@ import { useNavigate, Link } from "react-router";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Checkbox } from "../components/ui/checkbox";
 import { User, Mail, Phone, Lock, Eye, EyeOff, CheckCircle2, Loader2, ArrowRight } from "lucide-react";
-import { useAuth } from "../../hooks/useAuth";
+import { useAuth } from "../../hooks/useauth";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function Register() {

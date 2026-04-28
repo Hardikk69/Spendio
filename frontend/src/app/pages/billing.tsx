@@ -21,7 +21,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { api } from "../../lib/api";
-import { useAuth } from "../../hooks/useAuth";
+import { useAuth } from "../../hooks/useauth";
 import { useEffect, useState } from "react";
 
 declare global {

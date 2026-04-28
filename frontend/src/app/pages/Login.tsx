@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { Checkbox } from "../components/ui/checkbox";
 import { Eye, EyeOff, Loader2, ArrowRight } from "lucide-react";
-import { useAuth } from "../../hooks/useAuth";
+import { useAuth } from "../../hooks/useauth";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function Login() {

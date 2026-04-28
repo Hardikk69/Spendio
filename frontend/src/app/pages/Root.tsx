@@ -22,8 +22,8 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { useState, useEffect } from "react";
-import NotificationsPanel from "../components/NotificationsPanel";
-import { useAuth } from "../../hooks/useAuth";
+import NotificationsPanel from "../components/notificationspanel";
+import { useAuth } from "../../hooks/useauth";
 import { api } from "../../lib/api";
 
 export default function Root() {

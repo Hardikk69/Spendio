@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router";
 import { api } from "../../lib/api";
-import { useAuth } from "../../hooks/useAuth";
+import { useAuth } from "../../hooks/useauth";
 
 export default function Settings() {
   const { user, isLoading: authLoading } = useAuth();

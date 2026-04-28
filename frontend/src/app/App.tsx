@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { RouterProvider } from 'react-router';
 import { router } from './routes';
-import { AuthProvider } from '../hooks/useAuth';
+import { AuthProvider } from '../hooks/useauth';
 
 export default function App() {
   return (
