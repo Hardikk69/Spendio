@@ -22,9 +22,7 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { useState, useEffect } from "react";
-import ChatBot from "../components/ChatBot";
 import NotificationsPanel from "../components/NotificationsPanel";
-import { AIChatbot } from "../components/AIChatbot";
 import { useAuth } from "../../hooks/useAuth";
 import { api } from "../../lib/api";
 
@@ -235,8 +233,7 @@ export default function Root() {
       {/* Notifications Panel */}
       <NotificationsPanel isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} />
       
-      {/* AI Chatbot - Fixed Bottom Right */}
-      <AIChatbot />
+
     </div>
   );
 }
