@@ -304,8 +304,8 @@ export default function EnterpriseDashboard() {
                 </div>
               )}
             </div>
-              <Button variant="ghost" className="w-full rounded-none text-blue-600 h-12 border-t" onClick={() => navigate("/enterprise/services")}>
-                Manage All Services
+              <Button variant="ghost" className="w-full rounded-none text-blue-600 h-12 border-t" onClick={() => navigate("/user-management")}>
+                View All Subscribers
               </Button>
             
           </CardContent>

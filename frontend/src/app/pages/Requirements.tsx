@@ -64,14 +64,7 @@ export default function Requirements() {
         "Spending insights for users",
       ],
     },
-    {
-      category: "AI & Assistance",
-      items: [
-        "AI chatbot for subscription queries",
-        "Informational subscription insights",
-        "Read-only assistance features",
-      ],
-    },
+
   ];
 
   const nonFunctionalRequirements = [
@@ -151,7 +144,7 @@ export default function Requirements() {
     "Users possess basic digital literacy",
     "Payment functionalities rely on third-party gateway services",
     "Dependency on cloud hosting and database services",
-    "AI features based on predefined rules and informational models",
+
     "Performance dependent on server resources and network conditions",
   ];
 

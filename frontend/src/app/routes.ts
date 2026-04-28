@@ -16,6 +16,7 @@ const ProductsServices = lazy(() => import("./pages/ProductsServices"));
 const EnterpriseServices = lazy(() => import("./pages/EnterpriseServices"));
 
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const UserManagement = lazy(() => import("./pages/UserManagement"));
 
 export const router = createBrowserRouter([
   {
@@ -42,8 +43,8 @@ export const router = createBrowserRouter([
       { path: "billing", Component: Billing },
       { path: "shared", Component: SharedSubscriptions },
       { path: "analytics", Component: Analytics },
-      { path: "user-management", Component: Analytics },
-      { path: "enterprise-management", Component: Analytics },
+      { path: "user-management", Component: UserManagement },
+      { path: "enterprise-management", Component: UserManagement },
       { path: "admin", Component: AdminPanel },
       { path: "settings", Component: Settings },
     ],

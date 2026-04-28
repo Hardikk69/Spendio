@@ -31,7 +31,7 @@ export default function Overview() {
     "Dashboard-based notifications and alerts",
     "Enterprise analytics and churn trends",
     "Administrative dashboards for system monitoring",
-    "AI chatbot for subscription queries",
+
   ];
 
   const projectProgress = {

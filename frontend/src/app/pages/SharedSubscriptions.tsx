@@ -81,6 +81,8 @@ export default function SharedSubscriptions() {
 
   const [feedback, setFeedback] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
 
+  const selectedSubAmount = userSubscriptions.find(s => s.id.toString() === inviteForm.subscriptionId)?.amount || 0;
+
   const showFeedback = (msg: string, type: 'success' | 'error' = 'success') => {
     setFeedback({ msg, type });
     setTimeout(() => setFeedback(null), 4000);

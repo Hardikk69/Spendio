@@ -25,7 +25,7 @@ export default function UserStories() {
     { id: "US014", role: "Admin", wantsTo: "View system-wide metrics", soThat: "Monitor overall platform performance" },
     { id: "US015", role: "Admin", wantsTo: "Manage users and enterprises", soThat: "Maintain system integrity" },
     { id: "US016", role: "Admin", wantsTo: "Monitor subscription activity", soThat: "Detect misuse or anomalies" },
-    { id: "US017", role: "User", wantsTo: "Interact with an AI chatbot", soThat: "Get subscription-related information" },
+
     { id: "US018", role: "User", wantsTo: "Pause or cancel subscriptions", soThat: "Manage expenses flexibly" },
     { id: "US019", role: "User", wantsTo: "View payment status", soThat: "Confirm successful transactions" },
     { id: "US020", role: "Admin", wantsTo: "Send system-wide notifications", soThat: "Communicate updates effectively" },

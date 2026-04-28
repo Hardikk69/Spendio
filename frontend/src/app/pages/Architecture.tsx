@@ -71,11 +71,7 @@ export default function Architecture() {
       description: "Enterprise analytics and reporting",
       features: ["Data aggregation", "Trend analysis", "Report generation"],
     },
-    {
-      name: "AI Chatbot",
-      description: "Subscription query assistance",
-      features: ["Rule-based responses", "Query interpretation", "Information retrieval"],
-    },
+
   ];
 
   const databaseSchema = [
