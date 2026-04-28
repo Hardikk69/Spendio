@@ -20,8 +20,9 @@ import {
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
+import { useAuth } from "../../hooks/useAuth";
+import { useEffect, useState } from "react";
 
 declare global {
   interface Window {
@@ -64,7 +65,9 @@ export default function Billing() {
   const [filterPeriod, setFilterPeriod] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [simulating, setSimulating] = useState(false);
 
+  const { user } = useAuth();
   const [paymentHistory, setPaymentHistory] = useState<Transaction[]>([]);
   const [upcomingBills, setUpcomingBills] = useState<UpcomingBill[]>([]);
   const [stats, setStats] = useState<BillingStats | null>(null);
@@ -220,6 +223,7 @@ export default function Billing() {
         setAddMoneyLoading(false);
         resolve();
       });
+
 
       rzp.open();
     });

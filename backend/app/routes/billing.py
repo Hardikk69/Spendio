@@ -108,7 +108,7 @@ def create_order():
     data = request.get_json() or {}
 
     amount = data.get("amount")
-    if not amount:
+    if amount is None:
         return jsonify({"error": "amount is required"}), 400
 
     key_id = os.environ.get("RAZORPAY_KEY_ID", "")
@@ -295,4 +295,110 @@ def billing_stats():
         "successful_payments": successful,
         "failed_payments": failed,
         "pending_payments": pending_bills,
+    }), 200
+
+
+@billing_bp.route("/simulate-autopay", methods=["POST"])
+@jwt_required()
+def simulate_autopay():
+    """
+    Testing endpoint: fast-forwards all active auto-pay subscriptions
+    so their next_billing_date becomes today, then processes them —
+    creates billing + payment records, credits the user's wallet, and
+    advances next_billing_date by one cycle.
+    """
+    user_id = get_jwt_identity()
+    today = date.today()
+    now = datetime.utcnow()
+
+    # Get all active auto-pay subscriptions for this user
+    subs = db.session.query(Subscription, Service).join(
+        Service, Subscription.service_id == Service.service_id
+    ).filter(
+        Subscription.user_id == user_id,
+        Subscription.status == "Active",
+        Subscription.auto_pay == True,
+    ).all()
+
+    if not subs:
+        return jsonify({"message": "No active auto-pay subscriptions found", "processed": 0}), 200
+
+    user = User.query.get(user_id)
+    processed = []
+
+    for sub, service in subs:
+        amount = float(service.base_price)
+
+        # 1. Fast-forward: set next_billing_date to today
+        sub.next_billing_date = today
+
+        # 2. Create a Billing record
+        billing = Billing(
+            subscription_id=sub.subscription_id,
+            user_id=user_id,
+            amount_due=amount,
+            billing_date=today,
+            status="Paid",
+        )
+        db.session.add(billing)
+        db.session.flush()  # get billing_id
+
+        # 3. Create a Payment record
+        payment = Payment(
+            billing_id=billing.billing_id,
+            amount_paid=amount,
+            status="Success",
+            timestamp=now,
+            method="Auto-pay (Simulated)",
+        )
+        db.session.add(payment)
+
+        # 4. Credit the user's wallet balance
+        if user:
+            user.money = (user.money or 0) + int(amount)
+
+        # 5. Advance next_billing_date by one cycle
+        cycle = (service.billing_cycle or "Monthly").strip()
+        if cycle == "Monthly":
+            # Add ~1 month
+            m = sub.next_billing_date.month % 12 + 1
+            y = sub.next_billing_date.year + (1 if m == 1 else 0)
+            try:
+                sub.next_billing_date = sub.next_billing_date.replace(year=y, month=m)
+            except ValueError:
+                # Handle months with fewer days (e.g. Jan 31 -> Feb 28)
+                import calendar
+                last_day = calendar.monthrange(y, m)[1]
+                sub.next_billing_date = sub.next_billing_date.replace(year=y, month=m, day=min(sub.next_billing_date.day, last_day))
+        elif cycle == "Yearly":
+            sub.next_billing_date = sub.next_billing_date.replace(year=sub.next_billing_date.year + 1)
+        elif cycle == "Quarterly":
+            m = sub.next_billing_date.month
+            new_m = ((m - 1 + 3) % 12) + 1
+            y = sub.next_billing_date.year + (1 if new_m <= m else 0)
+            sub.next_billing_date = sub.next_billing_date.replace(year=y, month=new_m)
+        else:
+            sub.next_billing_date = sub.next_billing_date + timedelta(days=30)
+
+        # 6. Notification
+        create_notification(
+            user_id=user_id,
+            n_type="payment",
+            title="Auto-pay Processed",
+            message=f"Auto-payment of ₹{amount} for {service.name} was processed. Balance updated."
+        )
+
+        processed.append({
+            "subscription": service.name,
+            "amount": amount,
+            "next_billing_date": sub.next_billing_date.isoformat(),
+        })
+
+    db.session.commit()
+
+    return jsonify({
+        "message": f"Simulated auto-pay for {len(processed)} subscription(s)",
+        "processed": len(processed),
+        "details": processed,
+        "new_balance": user.money if user else 0,
     }), 200
